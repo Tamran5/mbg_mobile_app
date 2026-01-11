@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../main.dart';
-import '../dashboard_sekolah/main_navigation_sekolah.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import 'register_page.dart';
+import '../waiting_approval_page.dart';
+// 1. Import wrapper scaffold
+import '../../widgets/mbg_scaffold.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,154 +18,176 @@ class _LoginPageState extends State<LoginPage> {
   final Color _primaryBlue = const Color(0xFF1A237E);
   bool _isPasswordVisible = false;
 
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  void _handleLogin() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    if (_phoneController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Nomor HP dan Password wajib diisi")),
+      );
+      return;
+    }
+
+    final res = await authProvider.login(
+      _phoneController.text,
+      _passwordController.text,
+    );
+
+    if (res['status'] == 'success') {
+
+    } else {
+      // TAMBAHKAN INI: Feedback jika login gagal (Nomor HP/Password salah)
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? "Login Gagal"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          // --- 1. DEKORASI BULAT BIRU (Identik dengan Dashboard) ---
-          Positioned(
-            top: -70,
-            right: -50,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5D9CEC).withOpacity(0.12),
-                shape: BoxShape.circle,
+    final authProvider = Provider.of<AuthProvider>(context);
+
+    // 2. Ganti Scaffold dengan MbgScaffold
+    return MbgScaffold(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 30),
+        child: Column(
+          children: [
+            const SizedBox(height: 60),
+
+            // Logo
+            Center(
+              child: Image.asset(
+                'assets/images/logo.png',
+                height: 160,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.fastfood_rounded,
+                  size: 100,
+                  color: _primaryBlue,
+                ),
               ),
             ),
-          ),
 
-          // --- 2. KONTEN UTAMA ---
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: Column(
-                children: [
-                  const SizedBox(height: 80),
+            const SizedBox(height: 40),
 
-                  // Logo Flat (Tanpa Glow/Animasi)
-                  Center(
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      height: 160,
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) => Icon(
-                        Icons.fastfood_rounded,
-                        size: 100,
-                        color: _primaryBlue,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 50),
-
-                  Text(
-                    "Selamat Datang",
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: _primaryBlue,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Silakan masuk untuk melanjutkan",
-                    style: TextStyle(fontSize: 15, color: Colors.grey[600]),
-                  ),
-
-                  const SizedBox(height: 40),
-
-                  // Input Fields
-                  _buildTextField(
-                    label: "NIK atau Nomor HP",
-                    icon: Icons.person_pin_outlined,
-                  ),
-                  const SizedBox(height: 20),
-                  _buildTextField(
-                    label: "Kata Sandi",
-                    icon: Icons.lock_open_rounded,
-                    isPassword: true,
-                  ),
-
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {},
-                      child: Text(
-                        "Lupa Kata Sandi?",
-                        style: TextStyle(
-                          color: _primaryBlue,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Tombol Masuk
-                  _buildPrimaryButton("Masuk", () {
-                    // Navigasi ke MainNavigation agar Navbar muncul
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const MainNavigationSekolah()),
-                    );
-                  }),
-
-                  const SizedBox(height: 30),
-
-                  // Pemisah (Divider)
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: Colors.grey[200])),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 15),
-                        child: Text(
-                          "Atau masuk dengan",
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                      ),
-                      Expanded(child: Divider(color: Colors.grey[200])),
-                    ],
-                  ),
-
-                  const SizedBox(height: 25),
-
-                  // Tombol Google
-                  _buildSocialButton(
-                    label: "Masuk dengan Google",
-                    icon: FontAwesomeIcons.google,
-                    color: Colors.redAccent,
-                    onPressed: () {
-                      // Logika Google Sign In
-                    },
-                  ),
-
-                  const SizedBox(height: 40),
-                  _buildRegisterLink(),
-                  const SizedBox(height: 20),
-                ],
+            Text(
+              "Selamat Datang",
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: _primaryBlue,
+                letterSpacing: -0.5,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              "Silakan masuk untuk melanjutkan",
+              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+            ),
+
+            const SizedBox(height: 40),
+
+            // Input Fields
+            _buildTextField(
+              label: "Nomor WhatsApp",
+              icon: Icons.phone_android_outlined,
+              controller: _phoneController,
+              type: TextInputType.phone,
+            ),
+            const SizedBox(height: 20),
+            _buildTextField(
+              label: "Kata Sandi",
+              icon: Icons.lock_open_rounded,
+              controller: _passwordController,
+              isPassword: true,
+            ),
+
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {},
+                child: Text(
+                  "Lupa Kata Sandi?",
+                  style: TextStyle(
+                    color: _primaryBlue,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Tombol Masuk
+            _buildPrimaryButton(
+              authProvider.isLoading ? "Mohon Tunggu..." : "Masuk",
+              authProvider.isLoading ? null : _handleLogin,
+            ),
+
+            const SizedBox(height: 30),
+
+            // Divider
+            Row(
+              children: [
+                Expanded(child: Divider(color: Colors.grey[200])),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 15),
+                  child: Text(
+                    "Atau masuk dengan",
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
+                Expanded(child: Divider(color: Colors.grey[200])),
+              ],
+            ),
+
+            const SizedBox(height: 25),
+
+            _buildSocialButton(
+              label: "Masuk dengan Google",
+              icon: FontAwesomeIcons.google,
+              color: Colors.redAccent,
+              onPressed: () {},
+            ),
+
+            const SizedBox(height: 40),
+            _buildRegisterLink(),
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
 
-  // --- WIDGET HELPERS ---
+  // --- WIDGET HELPERS (Tetap sama) ---
 
   Widget _buildTextField({
     required String label,
     required IconData icon,
+    required TextEditingController controller,
     bool isPassword = false,
+    TextInputType type = TextInputType.text,
   }) {
     return TextField(
+      controller: controller,
+      keyboardType: type,
       obscureText: isPassword && !_isPasswordVisible,
       decoration: InputDecoration(
         labelText: label,
@@ -197,13 +222,13 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildPrimaryButton(String label, VoidCallback onPressed) {
+  Widget _buildPrimaryButton(String label, VoidCallback? onPressed) {
     return SizedBox(
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: _primaryBlue,
+          backgroundColor: onPressed == null ? Colors.grey : _primaryBlue,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(15),
           ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+// 1. Import wrapper scaffold yang sudah dibuat sebelumnya
+import '../../widgets/mbg_scaffold.dart'; 
 
 class JadwalPage extends StatefulWidget {
   const JadwalPage({super.key});
@@ -13,17 +15,15 @@ class _JadwalPageState extends State<JadwalPage> {
   DateTime _focusedDate = DateTime(2026, 1, 12);
   DateTime _selectedDate = DateTime(2026, 1, 12);
 
-  // Warna Biru Utama Aplikasi untuk Teks & Elemen Aktif
   final Color _primaryBlue = const Color(0xFF1A237E);
 
   @override
   void initState() {
     super.initState();
-    // Inisialisasi lokalisasi Bahasa Indonesia
     initializeDateFormatting('id_ID', null); 
   }
 
-  // Database Menu Minimalis (Senin - Sabtu)
+  // Database Menu (Static)
   late final Map<String, Map<String, dynamic>> _menuDatabase = {
     "2026-01-12": {
       "image": "https://media.suara.com/pictures/653x366/2025/01/16/94698-cuitan-warganet-soal-menu-makan-bergizi-gratis-hari-ke-7.jpg",
@@ -55,75 +55,68 @@ class _JadwalPageState extends State<JadwalPage> {
     String key = DateFormat('yyyy-MM-dd').format(_selectedDate);
     var data = _menuDatabase[key] ?? _menuDatabase["2026-01-12"]!;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
+    // 2. Menggunakan MbgScaffold sebagai pengganti Scaffold biasa
+    return MbgScaffold(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- 1. DEKORASI BULAT BIRU (Warna Identik Dashboard) ---
-          Positioned(
-            top: -70,
-            right: -50,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                // Menggunakan warna spesifik dari dashboard Anda
-                color: const Color(0xFF5D9CEC).withOpacity(0.12), 
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // --- 2. HEADER: Teks Menu & Bulan di Kiri, Tombol di Kanan ---
-                _buildLeftAlignedHeader(),
+          // Header: Judul Menu & Navigasi Bulan
+          _buildLeftAlignedHeader(),
 
-                Expanded(
-                  child: SingleChildScrollView(
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Kalender Horizontal
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _buildHorizontalCalendar(week),
+                  ),
+
+                  const SizedBox(height: 25),
+
+                  // Detail Menu Hari Terpilih
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // --- 3. KALENDER HORIZONTAL SENIN-SABTU ---
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: _buildHorizontalCalendar(week),
-                        ),
-
-                        const SizedBox(height: 25),
-                        // --- 4. KONTEN MENU UTAMA ---
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(15),
-                                child: Image.network(data['image'], height: 200, width: double.infinity, fit: BoxFit.cover),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(data['menu'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _primaryBlue)),
-                              
-                              const SizedBox(height: 30),
-                              const Text("Analisis Nutrisi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 16),
-                              _buildSimpleNutri(data),
-
-                              const SizedBox(height: 30),
-                              const Text("Komponen Piring", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 12),
-                              _buildSimplePlate(data['komponen']),
-                              const SizedBox(height: 40),
-                            ],
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(15),
+                          child: Image.network(
+                            data['image'], 
+                            height: 200, 
+                            width: double.infinity, 
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              height: 200,
+                              color: Colors.grey[200],
+                              child: const Icon(Icons.fastfood_rounded, size: 50, color: Colors.grey),
+                            ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        Text(
+                          data['menu'], 
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _primaryBlue),
+                        ),
+                        
+                        const SizedBox(height: 30),
+                        const Text("Analisis Nutrisi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 16),
+                        _buildSimpleNutri(data),
+
+                        const SizedBox(height: 30),
+                        const Text("Komponen Piring", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        _buildSimplePlate(data['komponen']),
+                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -131,13 +124,14 @@ class _JadwalPageState extends State<JadwalPage> {
     );
   }
 
+  // --- UI BUILDERS ---
+
   Widget _buildLeftAlignedHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 12, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Judul Menu Diperbesar (Kiri)
           Text(
             "Menu",
             style: TextStyle(
@@ -150,7 +144,6 @@ class _JadwalPageState extends State<JadwalPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Bulan & Tahun (Kiri)
               Text(
                 DateFormat('MMMM yyyy', 'id_ID').format(_focusedDate),
                 style: TextStyle(
@@ -159,7 +152,6 @@ class _JadwalPageState extends State<JadwalPage> {
                   fontSize: 18,
                 ),
               ),
-              // Tombol Navigasi Slide (Kanan)
               Row(
                 children: [
                   _buildNavButton(Icons.chevron_left, () {
@@ -184,8 +176,11 @@ class _JadwalPageState extends State<JadwalPage> {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: Colors.white,
           borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 5)
+          ],
         ),
         child: Icon(icon, color: _primaryBlue, size: 24),
       ),
@@ -206,14 +201,24 @@ class _JadwalPageState extends State<JadwalPage> {
               width: 55,
               margin: const EdgeInsets.only(right: 12),
               decoration: BoxDecoration(
-                color: isSel ? _primaryBlue : Colors.grey[100],
+                color: isSel ? _primaryBlue : Colors.white,
                 borderRadius: BorderRadius.circular(12),
+                border: isSel ? null : Border.all(color: Colors.grey[100]!),
+                boxShadow: [
+                  if (isSel) BoxShadow(color: _primaryBlue.withAlpha(77), blurRadius: 8, offset: const Offset(0, 4))
+                ],
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(DateFormat('EEE', 'id_ID').format(week[i]), style: TextStyle(color: isSel ? Colors.white70 : Colors.grey, fontSize: 12)),
-                  Text(DateFormat('d').format(week[i]), style: TextStyle(color: isSel ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text(
+                    DateFormat('EEE', 'id_ID').format(week[i]), 
+                    style: TextStyle(color: isSel ? Colors.white70 : Colors.grey, fontSize: 12),
+                  ),
+                  Text(
+                    DateFormat('d').format(week[i]), 
+                    style: TextStyle(color: isSel ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
                 ],
               ),
             ),
@@ -228,8 +233,11 @@ class _JadwalPageState extends State<JadwalPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.grey[100]!),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 10, offset: const Offset(0, 4))
+        ],
       ),
       child: Row(
         children: [
@@ -282,11 +290,11 @@ class _JadwalPageState extends State<JadwalPage> {
   Widget _buildSimplePlate(List<dynamic> items) {
     return Column(
       children: items.map((item) => Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(15),
         ),
         child: Row(
           children: [

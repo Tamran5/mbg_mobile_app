@@ -41,7 +41,7 @@ class RiwayatPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          LinearProgressIndicator(value: actual / target, backgroundColor: col.withOpacity(0.1), color: col, minHeight: 8),
+          LinearProgressIndicator(value: actual / target, backgroundColor: col.withAlpha(26), color: col, minHeight: 8),
         ],
       ),
     );

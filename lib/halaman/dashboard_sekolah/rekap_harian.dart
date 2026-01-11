@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+// 1. Import wrapper scaffold yang sudah kita buat sebelumnya
+import '../../widgets/mbg_scaffold.dart';
 
 class RekapHarianPage extends StatefulWidget {
   const RekapHarianPage({super.key});
@@ -11,7 +13,7 @@ class _RekapHarianPageState extends State<RekapHarianPage> {
   final Color _navy = const Color(0xFF1A237E);
   final Color _accent = const Color(0xFF5D9CEC);
 
-  // Simulasi data historis bulanan
+  // Simulasi data historis bulanan (Nantinya ditarik dari Backend Flask)
   final List<Map<String, dynamic>> _rekapData = [
     {
       "tgl": "05 Jan",
@@ -57,44 +59,67 @@ class _RekapHarianPageState extends State<RekapHarianPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
+    // 2. Menggunakan MbgScaffold untuk konsistensi dekorasi pojok kanan atas
+    return MbgScaffold(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Dekorasi lingkaran konsisten dengan tema MBG
-          Positioned(
-            top: -70,
-            right: -50,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                color: _accent.withOpacity(0.12),
-                shape: BoxShape.circle,
+          _buildHeader(context),
+          
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildMonthlyFilter(),
+                  const SizedBox(height: 10),
+                  _buildMonthlyStats(), // Ringkasan total porsi bulan ini
+                  
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Text(
+                      "Riwayat Distribusi", 
+                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF2D3436))
+                    ),
+                  ),
+
+                  // Daftar Riwayat
+                  Column(
+                    children: _rekapData.map((data) => _buildHistoryCard(data)).toList(),
+                  ),
+                  const SizedBox(height: 30),
+                ],
               ),
             ),
           ),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(context),
-                _buildMonthlyFilter(),
-                const SizedBox(height: 10),
-                _buildMonthlyStats(), // Ringkasan total porsi bulan ini
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 15),
-                  child: Text("Riwayat Distribusi", 
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: _rekapData.length,
-                    itemBuilder: (context, index) => _buildHistoryCard(_rekapData[index]),
-                  ),
-                ),
-              ],
+        ],
+      ),
+    );
+  }
+
+  // --- UI COMPONENTS ---
+
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 24, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            color: _navy,
+            onPressed: () => Navigator.pop(context),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 12, top: 10),
+            child: Text(
+              "Rekap Harian",
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: _navy,
+              ),
             ),
           ),
         ],
@@ -102,72 +127,55 @@ class _RekapHarianPageState extends State<RekapHarianPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 20, left: 10, right: 24),
-      child: Row(
-        children: [
-          IconButton(
-            icon: Icon(Icons.arrow_back_ios_new_rounded, color: _navy),
-            onPressed: () => Navigator.pop(context),
-          ),
-          Text(
-            "Rekap Harian",
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: _navy),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Filter untuk melihat histori per bulan
   Widget _buildMonthlyFilter() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8F9FD),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: "Januari 2026",
-            icon: Icon(Icons.keyboard_arrow_down, color: _navy),
-            items: ["Januari 2026", "Desember 2025", "November 2025"].map((String value) {
-              return DropdownMenuItem<String>(
-                value: value,
-                child: Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              );
-            }).toList(),
-            onChanged: (val) {},
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isExpanded: true,
+          value: "Januari 2026",
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: _navy),
+          style: TextStyle(color: _navy, fontWeight: FontWeight.bold, fontSize: 14),
+          items: ["Januari 2026", "Desember 2025", "November 2025"].map((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value),
+            );
+          }).toList(),
+          onChanged: (val) {},
         ),
       ),
     );
   }
 
   Widget _buildMonthlyStats() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: _navy,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: _navy.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _statItem("22 Hari", "Pengiriman"),
-            Container(width: 1, height: 30, color: Colors.white24),
-            _statItem("9.850", "Total Porsi"),
-            Container(width: 1, height: 30, color: Colors.white24),
-            _statItem("1", "Kendala"),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: _navy,
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: _navy.withAlpha(77), 
+            blurRadius: 15, 
+            offset: const Offset(0, 8)
+          )
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _statItem("22 Hari", "Pengiriman"),
+          Container(width: 1, height: 40, color: Colors.white24),
+          _statItem("9.850", "Total Porsi"),
+          Container(width: 1, height: 40, color: Colors.white24),
+          _statItem("1", "Kendala"),
+        ],
       ),
     );
   }
@@ -175,8 +183,9 @@ class _RekapHarianPageState extends State<RekapHarianPage> {
   Widget _statItem(String val, String label) {
     return Column(
       children: [
-        Text(val, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+        Text(val, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(color: Colors.white.withAlpha(179), fontSize: 10, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -191,37 +200,53 @@ class _RekapHarianPageState extends State<RekapHarianPage> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade100),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey[100]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(5), 
+            blurRadius: 10, 
+            offset: const Offset(0, 4)
+          )
+        ],
       ),
       child: Row(
         children: [
           // Indikator Tanggal
-          Column(
-            children: [
-              Text(data['tgl'], style: TextStyle(fontWeight: FontWeight.bold, color: _navy, fontSize: 16)),
-              Text(data['hari'], style: const TextStyle(color: Colors.grey, fontSize: 10)),
-            ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: _navy.withAlpha(13),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Text(data['tgl'], style: TextStyle(fontWeight: FontWeight.w900, color: _navy, fontSize: 16)),
+                Text(data['hari'], style: TextStyle(color: _navy.withAlpha(153), fontSize: 10, fontWeight: FontWeight.bold)),
+              ],
+            ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(data['menu'], 
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
+                Text(
+                  data['menu'], 
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF2D3436)),
+                  maxLines: 1, 
+                  overflow: TextOverflow.ellipsis
+                ),
+                const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(Icons.restaurant, size: 12, color: _accent),
+                    Icon(Icons.restaurant_rounded, size: 12, color: _accent),
                     const SizedBox(width: 4),
-                    Text("Porsi: ${data['porsi']}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text("${data['porsi']} Porsi", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
                     const SizedBox(width: 12),
-                    Icon(Icons.access_time, size: 12, color: _accent),
+                    Icon(Icons.access_time_filled_rounded, size: 12, color: _accent),
                     const SizedBox(width: 4),
-                    Text(data['waktu'], style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text(data['waktu'], style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ],
@@ -229,9 +254,15 @@ class _RekapHarianPageState extends State<RekapHarianPage> {
           ),
           // Tag Status
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-            child: Text(data['status'], style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor.withAlpha(26), 
+              borderRadius: BorderRadius.circular(10)
+            ),
+            child: Text(
+              data['status'].toUpperCase(), 
+              style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)
+            ),
           ),
         ],
       ),

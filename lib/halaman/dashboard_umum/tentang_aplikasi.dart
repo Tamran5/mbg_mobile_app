@@ -1,92 +1,120 @@
 import 'package:flutter/material.dart';
+import '../../widgets/mbg_scaffold.dart';
 
 class TentangAplikasiPage extends StatelessWidget {
   const TentangAplikasiPage({super.key});
 
-  // Warna Biru Utama Aplikasi
   final Color _primaryBlue = const Color(0xFF1A237E);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Tentang Aplikasi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1A237E),
-      ),
-      body: Stack(
+    return MbgScaffold(
+      body: Column(
         children: [
-          // --- 1. DEKORASI BULAT BIRU (Konsisten dengan Dashboard) ---
-          Positioned(
-            top: -70,
-            right: -50,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5D9CEC).withOpacity(0.12),
-                shape: BoxShape.circle,
+          _buildHeader(context),
+
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 30),
+
+                  // LOGO ASLI MBG
+                  Center(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      height: 180,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.fastfood_rounded, size: 80, color: _primaryBlue),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 30),
+
+                  
+                  Text(
+                    "Program Makan Bergizi Gratis",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: _primaryBlue,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Versi 1.0.0",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // --- INFO SECTIONS ---
+                  _buildInfoSection(
+                    "Apa itu MBG?", 
+                    "Makan Bergizi Gratis (MBG) adalah program pemerintah untuk memastikan setiap siswa mendapatkan asupan nutrisi seimbang setiap hari sekolah guna mendukung pertumbuhan fisik dan fokus belajar yang optimal."
+                  ),
+                  
+                  _buildInfoSection(
+                    "Tujuan Aplikasi", 
+                    "Aplikasi ini membantu ekosistem sekolah memantau jadwal menu, melihat analisis gizi harian, serta memberikan ulasan langsung untuk menjaga kualitas layanan makanan."
+                  ),
+                  
+                  _buildInfoSection(
+                    "Standar Gizi 2025", 
+                    "Setiap menu dirancang secara ilmiah sesuai Standar Gizi 2025 oleh ahli diet profesional untuk memenuhi AKG (Angka Kecukupan Gizi) harian anak sekolah."
+                  ),
+
+                  const SizedBox(height: 40),
+                  
+                  const Text(
+                    "© 2026 Tim Pengembang MBG",
+                    style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 40),
+                ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          // --- 2. KONTEN EDUKASI MBG ---
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 20),
-                // Logo Program dengan perbaikan penulisan Ikon
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.fastfood_rounded, size: 80, color: _primaryBlue),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  "Program Makan Bergizi Gratis",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1A237E)),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  "Versi 1.0.0",
-                  style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 30),
-                
-                // Deskripsi Program
-                _buildInfoSection(
-                  "Apa itu MBG?", 
-                  "Makan Bergizi Gratis (MBG) adalah program pemerintah untuk memastikan setiap siswa mendapatkan asupan nutrisi seimbang setiap hari sekolah guna mendukung pertumbuhan dan fokus belajar."
-                ),
-                
-                _buildInfoSection(
-                  "Tujuan Aplikasi", 
-                  "Aplikasi ini membantu siswa memantau jadwal menu mingguan, melihat analisis nutrisi harian, dan memberikan ulasan langsung terhadap makanan yang disajikan."
-                ),
-                
-                _buildInfoSection(
-                  "Standar Gizi 2025", 
-                  "Setiap menu dirancang oleh ahli gizi profesional dengan standar kalori yang disesuaikan untuk kebutuhan energi siswa di sekolah."
-                ),
+  // --- UI COMPONENTS ---
 
-                const SizedBox(height: 40),
-                const Text(
-                  "© 2026 Tim Pengembang MBG",
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-                const SizedBox(height: 20),
-              ],
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            color: _primaryBlue,
+            onPressed: () => Navigator.pop(context),
+          ),
+          const Expanded(
+            child: Text(
+              "Tentang Aplikasi",
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              textAlign: TextAlign.center,
             ),
           ),
+          const SizedBox(width: 48), // Penyeimbang IconButton agar teks tetap di tengah
         ],
       ),
     );
@@ -100,15 +128,25 @@ class TentangAplikasiPage extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2D3436)),
+            style: const TextStyle(
+              fontSize: 16, 
+              fontWeight: FontWeight.w800, 
+              color: Color(0xFF2D3436)
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             content,
             textAlign: TextAlign.justify,
-            style: const TextStyle(fontSize: 14, color: Colors.grey, height: 1.6),
+            style: const TextStyle(
+              fontSize: 14, 
+              color: Colors.black54, 
+              height: 1.6,
+              fontWeight: FontWeight.w500
+            ),
           ),
-          const Divider(height: 30),
+          const SizedBox(height: 15),
+          Divider(color: Colors.grey.withOpacity(0.1), thickness: 1.5),
         ],
       ),
     );

@@ -1,31 +1,44 @@
-import 'dart:io';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'api_service.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:image_picker/image_picker.dart'; // Gunakan XFile
+import 'package:http_parser/http_parser.dart'; // Untuk MediaType
+import 'api_service.dart';
 
 class AuthService {
   final ApiService _apiService = ApiService();
   final _storage = const FlutterSecureStorage();
 
-  // --- 1. LOGIKA PENDAFTARAN (Mendukung File KTP/SK) ---
-  // Ditambahkan parameter file dan fileField agar sesuai dengan RegisterPage
+  // --- 1. LOGIKA PENDAFTARAN (KOMPATIBEL WEB & MOBILE) ---
+  // Menggunakan XFile agar tidak crash di Chrome
   Future<Map<String, dynamic>> registerUser(
-      Map<String, String> fields, File? file, String fileField) async {
+      Map<String, String> fields, XFile? file, String fileField) async {
     try {
       var request = http.MultipartRequest(
           'POST', Uri.parse('${ApiService.baseUrl}/register'));
 
-      // Tambahkan field teks
       request.fields.addAll(fields);
 
-      // Tambahkan file dokumen jika ada (KTP untuk Lansia / SK untuk Operator)
       if (file != null) {
-        request.files.add(await http.MultipartFile.fromPath(fileField, file.path));
+        // SOLUSI: Baca bytes file agar diizinkan browser
+        final List<int> bytes = await file.readAsBytes();
+        
+        request.files.add(http.MultipartFile.fromBytes(
+          fileField,
+          bytes,
+          filename: file.name,
+          contentType: MediaType('image', 'jpeg'), // Pastikan sesuai format SK/KTP
+        ));
       }
 
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
+      
+      // Validasi apakah respon benar-benar JSON
+      if (!response.body.startsWith('{')) {
+        return {"status": "error", "message": "Server error (Bukan JSON)"};
+      }
+      
       return json.decode(response.body);
     } catch (e) {
       return {"status": "error", "message": "Gagal mendaftarkan akun: $e"};
@@ -38,19 +51,18 @@ class AuthService {
       final result = await _apiService.login(phone, password);
 
       if (result['status'] == 'success') {
-        final userData = result['data']; // Mengambil data nested dari Flask
+        final userData = result['data'];
 
-        // Simpan sesi secara aman
+        // Simpan data krusial untuk filter MBG
         await _storage.write(key: 'auth_token', value: result['token']);
         await _storage.write(key: 'user_role', value: userData['role']);
         await _storage.write(key: 'user_name', value: userData['name']);
         
-        // Simpan NPSN jika login sebagai Operator Sekolah
         if (userData['npsn'] != null) {
           await _storage.write(key: 'user_npsn', value: userData['npsn']);
         }
         
-        // Simpan status is_approved untuk verifikasi berjenjang
+        // Simpan status is_approved (1/0) dari DB
         await _storage.write(key: 'is_approved', value: userData['is_approved'].toString());
       }
       return result;
@@ -59,25 +71,15 @@ class AuthService {
     }
   }
 
-  // --- 3. AMBIL DATA PENGGUNA LOKAL ---
-  Future<Map<String, String?>> getSavedAuthData() async {
-    return {
-      "token": await _storage.read(key: 'auth_token'),
-      "role": await _storage.read(key: 'user_role'),
-      "name": await _storage.read(key: 'user_name'),
-      "npsn": await _storage.read(key: 'user_npsn'), // Tambahkan NPSN
-      "is_approved": await _storage.read(key: 'is_approved'),
-    };
-  }
-
-  // --- 4. LOGOUT ---
+  // --- 3. LOGOUT ---
   Future<void> logoutUser() async {
-    await _storage.deleteAll(); // Menghapus seluruh sesi
+    await _storage.deleteAll();
   }
 
-  // --- 5. VALIDASI STATUS VERIFIKASI ---
+  // --- 4. VALIDASI STATUS VERIFIKASI ---
+  // Sangat penting karena id 10 yanto butuh approval admin
   Future<bool> checkLocalApproval() async {
     String? status = await _storage.read(key: 'is_approved');
-    return status == 'true';
+    return status == 'true' || status == '1'; 
   }
 }

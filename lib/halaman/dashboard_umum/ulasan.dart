@@ -29,7 +29,7 @@ class _UlasanPageState extends State<UlasanPage> {
               width: 280,
               height: 280,
               decoration: BoxDecoration(
-                color: const Color(0xFF5D9CEC).withOpacity(0.12),
+                color: const Color(0xFF5D9CEC).withAlpha(31),
                 shape: BoxShape.circle,
               ),
             ),

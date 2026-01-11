@@ -26,7 +26,7 @@ class DashboardPage extends StatelessWidget {
               width: 280,
               height: 280,
               decoration: BoxDecoration(
-                color: const Color(0xFF5D9CEC).withOpacity(0.12),
+                color: const Color(0xFF5D9CEC).withAlpha(31),
                 shape: BoxShape.circle,
               ),
             ),
@@ -132,7 +132,7 @@ class DashboardPage extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))],
+            boxShadow: [BoxShadow(color: Colors.black.withAlpha(15), blurRadius: 10, offset: const Offset(0, 4))],
           ),
           child: const Icon(Icons.notifications_none_rounded, color: Colors.black87),
         ),
@@ -147,7 +147,7 @@ class DashboardPage extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)],
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 8)],
         ),
         child: Column(
           children: [
@@ -237,7 +237,7 @@ class DashboardPage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white, borderRadius: BorderRadius.circular(15), 
-          border: Border.all(color: Colors.grey.withOpacity(0.1))
+          border: Border.all(color: Colors.grey.withAlpha(26))
         ),
         child: Column(
           children: [

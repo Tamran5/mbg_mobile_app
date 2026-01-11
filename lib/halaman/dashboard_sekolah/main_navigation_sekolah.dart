@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'dashboard_sekolah.dart'; 
-import 'verifikasi_siswa.dart'; // Berisi VerifikasiPendaftaranPage
-import 'data_siswa.dart';      // Berisi DataSiswaPage dengan Search Bar
-import '../dashboard_umum/jadwal.dart'; 
-import '../dashboard_umum/profil.dart'; 
+import 'package:provider/provider.dart'; // Tambahkan provider
+import '../../providers/auth_provider.dart';
+import 'dashboard_sekolah.dart';
+import 'verifikasi_siswa.dart';
+import 'data_siswa.dart';
+import '../dashboard_umum/jadwal.dart';
+import '../dashboard_umum/profil.dart';
 
 class MainNavigationSekolah extends StatefulWidget {
   const MainNavigationSekolah({super.key});
@@ -13,33 +15,32 @@ class MainNavigationSekolah extends StatefulWidget {
 }
 
 class _MainNavigationSekolahState extends State<MainNavigationSekolah> {
-  int _currentIndex = 0;
-
-  // Fungsi callback untuk berpindah halaman tanpa menghilangkan Bottom Bar
-  void _jumpToTab(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-  }
+  // PENTING: _currentIndex sekarang dikelola sepenuhnya oleh AuthProvider
+  // agar tidak reset saat rebuild global.
 
   @override
   Widget build(BuildContext context) {
-    const Color navyColor = Color(0xFF1A237E); // Warna Navy Blue Konsisten
+    // Memantau status dari AuthProvider
+    final auth = Provider.of<AuthProvider>(context);
+    const Color navyColor = Color(0xFF1A237E);
 
-    // List halaman didefinisikan di dalam build agar dapat menerima fungsi _jumpToTab
+    // List halaman tetap sama
     final List<Widget> _pages = [
-      DashboardSekolah(onTapMenu: _jumpToTab), // Index 0: Dashboard Utama
-      const DataSiswaPage(),                  // Index 1: Manajemen Massal & Search
-      const VerifikasiPendaftaranPage(),      // Index 2: Verifikasi Pendaftaran Baru
-      const JadwalPage(),                     // Index 3: Jadwal Program MBG
-      const ProfilPage(),                     // Index 4: Profil Sekolah
+      DashboardSekolah(onTapMenu: (index) => auth.setTabIndex(index)),
+      const DataSiswaPage(),
+      const VerifikasiPendaftaranPage(),
+      const JadwalPage(),
+      const ProfilPage(),
     ];
 
     return Scaffold(
-      // Body akan berubah sesuai index namun Scaffold (termasuk Bottom Bar) tetap menetap
-      body: _pages[_currentIndex],
+      // 1. Menggunakan IndexedStack agar status scroll/input di tiap halaman tidak hilang
+      body: IndexedStack(
+        index: auth.currentTabIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: Container(
-        height: 80,
+        height: 85,
         decoration: BoxDecoration(
           color: Colors.white,
           boxShadow: [
@@ -47,46 +48,62 @@ class _MainNavigationSekolahState extends State<MainNavigationSekolah> {
               color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, -5),
-            )
+            ),
           ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavIcon(0, Icons.grid_view_rounded, "Beranda", navyColor),
-            _buildNavIcon(1, Icons.groups_rounded, "Data Siswa", navyColor),
-            _buildNavIcon(2, Icons.how_to_reg_rounded, "Verifikasi", navyColor),
-            _buildNavIcon(3, Icons.calendar_today_rounded, "Jadwal", navyColor),
-            _buildNavIcon(4, Icons.person_outline_rounded, "Profil", navyColor),
+            _buildNavIcon(0, Icons.grid_view_rounded, "Beranda", navyColor, auth),
+            _buildNavIcon(1, Icons.groups_rounded, "Siswa", navyColor, auth),
+            _buildNavIcon(2, Icons.how_to_reg_rounded, "Verifikasi", navyColor, auth),
+            _buildNavIcon(3, Icons.calendar_today_rounded, "Jadwal", navyColor, auth),
+            _buildNavIcon(4, Icons.person_outline_rounded, "Profil", navyColor, auth),
           ],
         ),
       ),
     );
   }
 
-  // Widget Helper untuk membangun ikon navigasi
-  Widget _buildNavIcon(int index, IconData icon, String label, Color activeColor) {
-    bool isSelected = _currentIndex == index;
+  // 2. Widget Helper yang sudah disinkronkan dengan AuthProvider
+  Widget _buildNavIcon(
+    int index,
+    IconData icon,
+    String label,
+    Color activeColor,
+    AuthProvider auth,
+  ) {
+    bool isSelected = auth.currentTabIndex == index;
+
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () => auth.setTabIndex(index), // Update index ke provider
       child: Container(
         color: Colors.transparent,
         width: 65,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon, 
-              color: isSelected ? activeColor : Colors.grey[300], 
-              size: 24
+            // Efek background bulat pada ikon aktif (Sesuai tema MBG)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: isSelected ? activeColor : Colors.grey[300],
+                size: 26,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
-                fontSize: 9,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? activeColor : Colors.grey[300],
+                color: isSelected ? activeColor : Colors.grey[400],
               ),
               textAlign: TextAlign.center,
             ),

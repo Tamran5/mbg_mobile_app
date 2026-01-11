@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import '../../widgets/mbg_scaffold.dart';
 
 class UlasanSayaPage extends StatefulWidget {
   const UlasanSayaPage({super.key});
@@ -15,10 +16,10 @@ class _UlasanSayaPageState extends State<UlasanSayaPage> {
   @override
   void initState() {
     super.initState();
-    initializeDateFormatting('id_ID', null); // Format Bahasa Indonesia
+    initializeDateFormatting('id_ID', null); 
   }
 
-  // Data Dummy Ulasan Siswa
+  // Data Dummy Ulasan (Nantinya diintegrasikan dengan Backend Flask)
   final List<Map<String, dynamic>> _ulasanData = [
     {
       "tanggal": "2026-01-02",
@@ -38,107 +39,150 @@ class _UlasanSayaPageState extends State<UlasanSayaPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Ulasan Saya", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        centerTitle: true,
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: _primaryBlue,
-      ),
-      body: Stack(
+    // 2. Menggunakan MbgScaffold untuk konsistensi dekorasi pojok kanan atas
+    return MbgScaffold(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- 1. DEKORASI BULAT BIRU (Style Dashboard) ---
-          Positioned(
-            top: -70,
-            right: -50,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5D9CEC).withOpacity(0.12),
-                shape: BoxShape.circle,
+          // Header Kustom
+          _buildHeader(context),
+
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              itemCount: _ulasanData.length,
+              itemBuilder: (context, index) {
+                var item = _ulasanData[index];
+                DateTime date = DateTime.parse(item['tanggal']!);
+                
+                return _buildReviewCard(item, date);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- UI COMPONENTS ---
+
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 24, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            color: _primaryBlue,
+            onPressed: () => Navigator.pop(context),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 12, top: 10),
+            child: Text(
+              "Ulasan Saya",
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: _primaryBlue,
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          // --- 2. DAFTAR ULASAN ---
-          ListView.builder(
-            padding: const EdgeInsets.all(24),
-            itemCount: _ulasanData.length,
-            itemBuilder: (context, index) {
-              var item = _ulasanData[index];
-              DateTime date = DateTime.parse(item['tanggal']!);
-              
-              return Container(
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey[100]!),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 5))
-                  ],
+  Widget _buildReviewCard(Map<String, dynamic> item, DateTime date) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey[100]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(5), 
+            blurRadius: 10, 
+            offset: const Offset(0, 5)
+          )
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // Thumbnail Menu
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    item['img']!, 
+                    width: 60, height: 60, fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: 60, height: 60, color: Colors.grey[100],
+                      child: const Icon(Icons.fastfood, color: Colors.grey),
+                    ),
+                  ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
+                const SizedBox(width: 16),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          // Thumbnail
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(item['img']!, width: 60, height: 60, fit: BoxFit.cover),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(date),
-                                  style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  item['menu']!,
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _primaryBlue),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Divider(height: 1),
-                      ),
-                      // Rating Bintang
-                      Row(
-                        children: List.generate(5, (starIndex) {
-                          return Icon(
-                            starIndex < item['rating'] ? Icons.star_rounded : Icons.star_outline_rounded,
-                            color: Colors.orangeAccent,
-                            size: 20,
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 10),
-                      // Teks Komentar
                       Text(
-                        item['komentar']!,
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF2D3436), height: 1.5, fontStyle: FontStyle.italic),
+                        DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(date),
+                        style: const TextStyle(
+                          fontSize: 10, 
+                          color: Colors.grey, 
+                          fontWeight: FontWeight.bold
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item['menu']!,
+                        style: TextStyle(
+                          fontSize: 14, 
+                          fontWeight: FontWeight.bold, 
+                          color: _primaryBlue
+                        ),
                       ),
                     ],
                   ),
                 ),
-              );
-            },
-          ),
-        ],
+              ],
+            ),
+            const Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1),
+            ),
+            // Rating Bintang
+            Row(
+              children: List.generate(5, (starIndex) {
+                return Icon(
+                  starIndex < item['rating'] 
+                      ? Icons.star_rounded 
+                      : Icons.star_outline_rounded,
+                  color: Colors.orangeAccent,
+                  size: 20,
+                );
+              }),
+            ),
+            const SizedBox(height: 10),
+            // Teks Komentar
+            Text(
+              item['komentar']!,
+              style: const TextStyle(
+                fontSize: 13, 
+                color: Color(0xFF2D3436), 
+                height: 1.5, 
+                fontStyle: FontStyle.italic
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

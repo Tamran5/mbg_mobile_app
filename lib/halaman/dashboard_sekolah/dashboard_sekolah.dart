@@ -1,193 +1,218 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart'; // WAJIB UNTUK kIsWeb
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import '../../providers/auth_provider.dart';
-import 'laporan_kendala.dart';
-import 'rekap_harian.dart';
+import '../../services/api_service.dart';
+import '../../widgets/mbg_scaffold.dart';
 
-class DashboardSekolah extends StatelessWidget {
-  final Function(int) onTapMenu; 
-
+class DashboardSekolah extends StatefulWidget {
+  final Function(int) onTapMenu;
   const DashboardSekolah({super.key, required this.onTapMenu});
 
-  // Tema warna Navy Blue dan Light Blue konsisten proyek MBG
-  final Color _primaryBlue = const Color(0xFF1A237E); 
-  final Color _accentBlue = const Color(0xFF5D9CEC);  
+  @override
+  State<DashboardSekolah> createState() => _DashboardSekolahState();
+}
+
+class _DashboardSekolahState extends State<DashboardSekolah> {
+  final Color _primaryBlue = const Color(0xFF1A237E);
+  final ImagePicker _picker = ImagePicker();
+  XFile? _imageFile;
+
+  // State terpisah agar tidak refresh seluruh dashboard
+  String _totalSiswa = "0";
+  String _perluVerifikasi = "0";
+  bool _isStatsLoading = true;
+  bool _isUploading = false;
+  bool _isTokenLoading = false; 
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  // --- LOGIKA DATA ---
+
+  Future<void> _loadDashboardData() async {
+    if (!mounted) return;
+    setState(() => _isStatsLoading = true);
+    await _fetchStats();
+    if (mounted) setState(() => _isStatsLoading = false);
+  }
+
+  // LOGIKA GANTI TOKEN SAJA (Tanpa Refresh Dashboard)
+  Future<void> _changeTokenOnly() async {
+    if (!mounted) return;
+    setState(() => _isTokenLoading = true);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    await auth.fetchSchoolStats(); 
+    if (mounted) setState(() => _isTokenLoading = false);
+  }
+
+  Future<void> _fetchStats() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final stats = await auth.fetchSchoolStats();
+    if (mounted && stats['status'] == 'success') {
+      setState(() {
+        _totalSiswa = stats['data']['total_siswa'].toString();
+        _perluVerifikasi = stats['data']['perlu_verifikasi'].toString();
+      });
+    }
+  }
+
+  // --- LOGIKA KAMERA ---
+  Future<void> _pickImage() async {
+    final XFile? selected = await _picker.pickImage(source: ImageSource.camera, imageQuality: 50);
+    if (selected != null) setState(() => _imageFile = selected);
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Mengambil data dari AuthProvider secara reaktif
     return Consumer<AuthProvider>(
       builder: (context, auth, child) {
-        return Scaffold(
-          backgroundColor: Colors.white,
-          body: Stack(
-            children: [
-              _buildBackgroundDecoration(),
-              SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 20),
-                      _buildHeader(auth), // Dinamis berdasarkan data login
-                      const SizedBox(height: 25),
-                      _buildSummaryCard(), 
-                      const SizedBox(height: 25),
-                      _buildTokenCard(context, auth), // Token Registrasi Sekolah
-                      const SizedBox(height: 25),
-                      const Text("Konfirmasi Kedatangan Makanan", 
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 12),
-                      _buildArrivalConfirmationCard(), 
-                      const SizedBox(height: 25),
-                      const Text("Aksi Cepat", 
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 12),
-                      _buildActionGrid(context),
-                      const SizedBox(height: 30),
-                    ],
-                  ),
-                ),
+        return MbgScaffold(
+          body: RefreshIndicator(
+            onRefresh: _loadDashboardData,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  _buildHeader(auth), // Header dengan Logo Notifikasi yang benar
+                  const SizedBox(height: 25),
+                  _buildSummaryCard(),
+                  const SizedBox(height: 25),
+                  _buildTokenCard(auth), // Kartu Token Sederhana + Pesan
+                  const SizedBox(height: 30),
+                  const Text("Konfirmasi Kedatangan", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  _buildArrivalCard(), // FIX: Gambar Web & Mobile
+                  const SizedBox(height: 30),
+                  const Text("Menu Administrasi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 12),
+                  _buildActionGrid(context),
+                  const SizedBox(height: 30),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  // Dekorasi Latar Belakang
-  Widget _buildBackgroundDecoration() {
-    return Positioned(
-      top: -70,
-      right: -50,
-      child: Container(
-        width: 280, height: 280,
-        decoration: BoxDecoration(
-          color: _accentBlue.withOpacity(0.12),
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
+  // --- UI COMPONENTS ---
 
-  // Header Dashboard dengan Data Dinamis
   Widget _buildHeader(AuthProvider auth) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text("Dashboard", 
-              style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500)),
-            Text(auth.userName ?? "Admin Sekolah", 
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: _primaryBlue)),
-            Text("NPSN: ${auth.userNpsn ?? '-'}", 
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF2D3436))),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Selamat Datang,", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              Text(auth.userName ?? "Admin Sekolah", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: _primaryBlue)),
+              Text(auth.schoolName ?? "Institusi Belum Terdaftar", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black54)),
+            ],
+          ),
         ),
-        _buildNotificationIcon(),
+        _buildNotificationIcon(), // Menampilkan logo notifikasi kembali
       ],
     );
   }
 
-  // Ringkasan Statistik
   Widget _buildSummaryCard() {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _primaryBlue,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: _primaryBlue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
-      ),
+      decoration: BoxDecoration(color: _primaryBlue, borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem("450", "Siswa Aktif"),
+          _buildStatItem(_totalSiswa, "Siswa Aktif"),
           Container(width: 1, height: 40, color: Colors.white24),
-          _buildStatItem("12", "Perlu Verifikasi"),
+          _buildStatItem(_perluVerifikasi, "Perlu Verifikasi"),
         ],
       ),
     );
   }
 
-  // Widget Token Registrasi (Digunakan Siswa untuk mendaftar di sekolah ini)
-  Widget _buildTokenCard(BuildContext context, AuthProvider auth) {
+  Widget _buildTokenCard(AuthProvider auth) {
+    String tokenCode = auth.userNpsn != null ? "REG-${auth.userNpsn}" : "MEMUAT...";
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8EAF6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _primaryBlue.withOpacity(0.1)),
-      ),
-      child: Row(
+      decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.vpn_key_rounded, color: _primaryBlue),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Token Registrasi Sekolah", 
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                Text(auth.userNpsn != null ? "TOKEN-${auth.userNpsn}" : "MEMUAT...", 
-                  style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1.5)),
-              ],
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("TOKEN REGISTRASI SISWA", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  Text(tokenCode, style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.w900, fontSize: 20)),
+                ],
+              ),
+              _isTokenLoading 
+                ? SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _primaryBlue))
+                : IconButton(
+                    onPressed: _changeTokenOnly, // Hanya ganti token saja
+                    icon: Icon(Icons.sync_rounded, color: _primaryBlue, size: 28),
+                  ),
+            ],
           ),
-          IconButton(
-            onPressed: () {
-              // TODO: Implementasi refresh token via API Flask
-            },
-            icon: Icon(Icons.refresh_rounded, color: _primaryBlue),
+          const Divider(height: 24),
+          const Text(
+            "Pesan: Token ini mencegah siswa dari sekolah/SMA lain mendaftar di akun sekolah ini secara sembarangan.",
+            style: TextStyle(fontSize: 11, color: Colors.black54, fontStyle: FontStyle.italic, height: 1.4),
           ),
         ],
       ),
     );
   }
 
-  // Konfirmasi Foto (Jembatan ke fitur Digital Image Processing MBG)
-  Widget _buildArrivalConfirmationCard() {
+  Widget _buildArrivalCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.shade200)),
       child: Column(
         children: [
-          Container(
-            height: 140,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.add_a_photo_outlined, color: _primaryBlue.withOpacity(0.4), size: 40),
-                const SizedBox(height: 10),
-                Text("Ambil Foto Makanan Sampai", style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-              ],
+          GestureDetector(
+            onTap: _pickImage,
+            child: Container(
+              height: 150,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+                // FIX: Gunakan kIsWeb untuk menentukan cara render gambar
+                image: _imageFile != null 
+                  ? DecorationImage(
+                      image: kIsWeb 
+                        ? NetworkImage(_imageFile!.path) // Untuk Web
+                        : FileImage(File(_imageFile!.path)) as ImageProvider, // Untuk Android
+                      fit: BoxFit.cover
+                    ) 
+                  : null,
+              ),
+              child: _imageFile == null ? Icon(Icons.camera_enhance_rounded, color: _primaryBlue.withOpacity(0.3), size: 40) : null,
             ),
           ),
           const SizedBox(height: 15),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: const Text("KONFIRMASI KEDATANGAN", 
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              onPressed: _imageFile == null ? null : () {},
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              child: const Text("KONFIRMASI SEKARANG", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -202,62 +227,53 @@ class DashboardSekolah extends StatelessWidget {
       crossAxisCount: 2,
       crossAxisSpacing: 15,
       mainAxisSpacing: 15,
-      childAspectRatio: 1.3,
+      childAspectRatio: 1.4,
       children: [
-        _buildActionItem("Data Siswa", Icons.groups_rounded, Colors.blue, () => onTapMenu(1)),
-        _buildActionItem("Verifikasi Siswa", Icons.how_to_reg_rounded, Colors.orange, () => onTapMenu(2)),
-        _buildActionItem("Laporan Kendala", Icons.report_problem_rounded, Colors.red, () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const LaporanKendalaPage()));
-        }),
-        _buildActionItem("Rekap Harian", Icons.bar_chart_rounded, Colors.teal, () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const RekapHarianPage()));
-        }),
+        _buildActionItem("Data Siswa", Icons.groups_rounded, Colors.blue, () => widget.onTapMenu(1)),
+        _buildActionItem("Verifikasi", Icons.how_to_reg_rounded, Colors.orange, () => widget.onTapMenu(2)),
+        _buildActionItem("Laporan", Icons.report_problem_rounded, Colors.red, () {}),
+        _buildActionItem("Rekap", Icons.bar_chart_rounded, Colors.teal, () {}),
       ],
     );
   }
 
-  // Widget Pembantu
-  Widget _buildActionItem(String title, IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.shade100),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 10),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
-      ),
-    );
-  }
+  // --- HELPERS ---
 
   Widget _buildStatItem(String value, String label) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+        _isStatsLoading
+            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : Text(value, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
       ],
     );
   }
 
+  Widget _buildActionItem(String title, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.shade100)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 8),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildNotificationIcon() {
     return Container(
-      width: 48, height: 48,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10)],
-      ),
-      child: const Icon(Icons.notifications_none_rounded),
+      width: 45, height: 45,
+      decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+      child: const Icon(Icons.notifications_none_rounded, color: Colors.black87),
     );
   }
 }
