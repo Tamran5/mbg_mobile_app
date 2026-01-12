@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import 'register_page.dart';
 import '../waiting_approval_page.dart';
-// 1. Import wrapper scaffold
 import '../../widgets/mbg_scaffold.dart';
 
 class LoginPage extends StatefulWidget {

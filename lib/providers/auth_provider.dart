@@ -132,7 +132,7 @@ class AuthProvider with ChangeNotifier {
       _userName = userData['name'];
       _userEmail = userData['email'];
       _userPhone = userData['phone']?.toString();
-      _userNpsn = userData['npsn']?.toString();
+      _userNpsn = userData['npsn']?.toString(); 
       _schoolName = userData['school_name'];
       _userNisn = userData['nisn']?.toString();
       _userNik = userData['nik']?.toString();

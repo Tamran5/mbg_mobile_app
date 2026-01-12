@@ -1,10 +1,12 @@
 import 'dart:convert';
-// import 'dart:io';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../models/menu_model.dart';
+import 'package:intl/intl.dart';
 
 class ApiService {
-  static const String baseUrl = "http://192.168.56.82:5000/api";
+  static const String baseUrl = "http://192.168.18.6:5000/api";
   // static const String baseUrl = "http://10.0.2.2:5000/api";
   
   final _storage = const FlutterSecureStorage();
@@ -91,6 +93,33 @@ class ApiService {
       return result;
     } catch (e) {
       return {"status": "error", "message": "Gagal terhubung ke server: $e"};
+    }
+  }
+
+  Future<MenuModel?> fetchMenuByDate(DateTime selectedDate) async {
+    try {
+      // 1. Format tanggal ke yyyy-MM-dd agar dimengerti Flask
+      String formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+      
+      // 2. Kirim parameter tanggal lewat Query String (?date=2026-01-12)
+      final response = await http.get(
+        Uri.parse('$baseUrl/v1/menu-hari-ini?date=$formattedDate'),
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> result = jsonDecode(response.body);
+        
+        if (result['status'] == 'success' && result['data'] != null) {
+          return MenuModel.fromJson(result['data']);
+        }
+      } 
+      
+      // Jika 404 atau data kosong, kembalikan null agar UI tampilkan "Belum ada menu"
+      return null; 
+    } catch (e) {
+      print("Error koneksi API Menu: $e");
+      return null;
     }
   }
 
