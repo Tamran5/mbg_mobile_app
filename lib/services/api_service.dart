@@ -1,62 +1,47 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../models/menu_model.dart';
 import 'package:intl/intl.dart';
+import '../models/menu_model.dart';
 
 class ApiService {
-  static const String baseUrl = "http://192.168.18.6:5000/api";
-  // static const String baseUrl = "http://10.0.2.2:5000/api";
+  // Gunakan IP Address server Flask Anda
+  static const String baseUrl = "http://192.168.100.183:5000/api";
   
-  final _storage = const FlutterSecureStorage();
+  // Durasi timeout untuk mencegah aplikasi "nyangkut" selamanya saat sinyal buruk
+  final Duration _timeoutDuration = const Duration(seconds: 10);
 
   // --- 1. HEADER HELPER ---
-  // Otomatis mengambil token untuk setiap request yang membutuhkan autentikasi
-  Future<Map<String, String>> _getHeaders({bool isMultipart = false}) async {
-    String? token = await _storage.read(key: 'auth_token');
+  // Token sekarang dikirim dari AuthProvider sebagai parameter
+  Map<String, String> _headers(String? token, {bool isMultipart = false}) {
     return {
       if (!isMultipart) "Content-Type": "application/json",
+      "Accept": "application/json",
       if (token != null) "Authorization": "Bearer $token",
     };
   }
 
-  // --- 2. FUNGSI GET (DENGAN AUTH) ---
-  Future<Map<String, dynamic>> get(String endpoint) async {
-    try {
-      final response = await http.get(
-        Uri.parse("$baseUrl$endpoint"),
-        headers: await _getHeaders(),
-      );
-      return jsonDecode(response.body);
-    } catch (e) {
-      throw Exception("Gagal mengambil data: $e");
-    }
-  }
-
-  // --- 3. FUNGSI POST (JSON) ---
-  Future<Map<String, dynamic>> post(String endpoint, Map<String, dynamic> data) async {
+  // --- 2. FUNGSI LOGIN ---
+  Future<Map<String, dynamic>> login(String phone, String password) async {
     try {
       final response = await http.post(
-        Uri.parse("$baseUrl$endpoint"),
-        headers: await _getHeaders(),
-        body: jsonEncode(data),
-      );
-      return jsonDecode(response.body);
+        Uri.parse("$baseUrl/login"),
+        headers: _headers(null), // Login tidak butuh token
+        body: jsonEncode({"phone": phone, "password": password}),
+      ).timeout(_timeoutDuration);
+
+      return _handleResponse(response);
     } catch (e) {
-      return {"status": "error", "message": "Koneksi server gagal: $e"};
+      return {"status": "error", "message": "Gagal terhubung ke server: $e"};
     }
   }
 
-  // --- 4. DROPDOWN OTOMATIS: AMBIT MITRA (BARU) ---
-  // Mengambil daftar Dapur atau Sekolah berdasarkan Kecamatan
+  // --- 3. FUNGSI GET PARTNERS (Untuk Registrasi) ---
   Future<List<Map<String, dynamic>>> getPartners(String role, String district) async {
     try {
-      // Endpoint: /get-partners?role=admin_dapur&district=Klojen
       final response = await http.get(
         Uri.parse("$baseUrl/get-partners?role=$role&district=$district"),
-        headers: {"Content-Type": "application/json"}, // Publik saat registrasi
-      );
+      ).timeout(_timeoutDuration);
 
       if (response.statusCode == 200) {
         final List result = jsonDecode(response.body);
@@ -64,67 +49,47 @@ class ApiService {
       }
       return [];
     } catch (e) {
-      print("Error getPartners: $e");
       return [];
     }
   }
 
-  // --- 5. LOGIN & STORAGE ---
-  Future<Map<String, dynamic>> login(String phone, String password) async {
+  // --- 4. FUNGSI AMBIL MENU (DENGAN TOKEN) ---
+  Future<MenuModel?> fetchMenuByDate(DateTime selectedDate, String? token) async {
     try {
-      final response = await http.post(
-        Uri.parse("$baseUrl/login"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"phone": phone, "password": password}),
-      );
-
-      final result = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && result['token'] != null) {
-        final userData = result['data'];
-        await _storage.write(key: 'auth_token', value: result['token']);
-        await _storage.write(key: 'user_role', value: userData['role']);
-        await _storage.write(key: 'user_name', value: userData['name']);
-        if (userData['npsn'] != null) {
-          await _storage.write(key: 'user_npsn', value: userData['npsn']);
-        }
-        await _storage.write(key: 'is_approved', value: userData['is_approved'].toString());
-      }
-      return result;
-    } catch (e) {
-      return {"status": "error", "message": "Gagal terhubung ke server: $e"};
-    }
-  }
-
-  Future<MenuModel?> fetchMenuByDate(DateTime selectedDate) async {
-    try {
-      // 1. Format tanggal ke yyyy-MM-dd agar dimengerti Flask
       String formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
       
-      // 2. Kirim parameter tanggal lewat Query String (?date=2026-01-12)
       final response = await http.get(
         Uri.parse('$baseUrl/v1/menu-hari-ini?date=$formattedDate'),
-        headers: await _getHeaders(),
-      );
+        headers: _headers(token),
+      ).timeout(_timeoutDuration);
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> result = jsonDecode(response.body);
-        
         if (result['status'] == 'success' && result['data'] != null) {
           return MenuModel.fromJson(result['data']);
         }
       } 
-      
-      // Jika 404 atau data kosong, kembalikan null agar UI tampilkan "Belum ada menu"
       return null; 
     } catch (e) {
-      print("Error koneksi API Menu: $e");
       return null;
     }
   }
 
-  // --- 6. LOGOUT ---
-  Future<void> logout() async {
-    await _storage.deleteAll();
+  // --- 5. UNIVERSAL RESPONSE HANDLER ---
+  // Memastikan aplikasi tidak crash jika server mengirim error HTML (500)
+  Map<String, dynamic> _handleResponse(http.Response response) {
+    try {
+      final contentType = response.headers['content-type'];
+      if (contentType != null && contentType.contains('application/json')) {
+        return jsonDecode(response.body);
+      } else {
+        return {
+          "status": "error", 
+          "message": "Server error (${response.statusCode}). Silakan coba lagi nanti."
+        };
+      }
+    } catch (e) {
+      return {"status": "error", "message": "Terjadi kesalahan pengolahan data server."};
+    }
   }
 }

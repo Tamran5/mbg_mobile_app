@@ -30,6 +30,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _studentCountController = TextEditingController();
   final TextEditingController _villageController = TextEditingController();
+  // Controller Baru untuk Token Siswa
+  final TextEditingController _studentTokenController = TextEditingController();
 
   // --- STATE VARIABLES ---
   RegionManager? _regionManager;
@@ -60,8 +62,10 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  // Mengambil daftar Sekolah atau Dapur berdasarkan wilayah
   void _fetchPartners(String district) async {
     if (_selectedRole == null) return;
+    // Jika Siswa, cari Pengelola Sekolah. Jika lainnya, cari Admin Dapur.
     String targetRole = _selectedRole == 'Siswa' ? 'pengelola_sekolah' : 'admin_dapur'; 
     final api = ApiService();
     final result = await api.getPartners(targetRole, district);
@@ -83,12 +87,12 @@ class _RegisterPageState extends State<RegisterPage> {
     _addressController.dispose(); 
     _studentCountController.dispose();
     _villageController.dispose();
+    _studentTokenController.dispose(); // Membersihkan controller token
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 2. Gunakan MbgScaffold untuk konsistensi latar belakang
     return MbgScaffold(
       body: Column(
         children: [
@@ -152,6 +156,138 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  Widget _buildDynamicFields() {
+    bool isSchool = _selectedRole == 'Pengelola Sekolah';
+    bool isStudent = _selectedRole == 'Siswa';
+    bool isLansia = _selectedRole == 'Lansia';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 25),
+        _buildSectionHeader(isSchool ? "Data Institusi Sekolah" : "Identitas Penerima"),
+        _buildTextField(_idNumberController, Icons.badge_outlined, isSchool ? "NPSN Sekolah" : (isLansia ? "NIK Lansia" : "NISN Siswa")),
+        
+        // Input Token Khusus Siswa
+        if (isStudent) ...[
+          const SizedBox(height: 15),
+          _buildTextField(
+            _studentTokenController, 
+            Icons.key_outlined, 
+            "Token Registrasi Sekolah",
+            type: TextInputType.text,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 10),
+            child: Text(
+              "*Minta token pendaftaran pada admin sekolah Anda",
+              style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 15),
+        _buildSectionHeader(isStudent ? "Pilih Sekolah" : "Pilih Mitra Dapur"),
+        
+        DropdownButtonFormField<String>(
+          decoration: _inputStyle(isStudent ? "Daftar Sekolah" : "Daftar Dapur Pelaksana", Icons.handshake_outlined),
+          value: _selectedPartnerId,
+          items: _availablePartners.map((p) => DropdownMenuItem(
+            value: p['id'].toString(), 
+            child: Text(p['name'].toString()),
+          )).toList(),
+          onChanged: _availablePartners.isEmpty ? null : (val) => setState(() => _selectedPartnerId = val),
+          validator: (val) => val == null ? "Wajib pilih mitra" : null,
+        ),
+
+        if (_availablePartners.isEmpty && _selectedDist != null) _buildPartnerAlert(),
+
+        if (isSchool || isLansia) ...[
+          const SizedBox(height: 15),
+          if (isSchool) _buildTextField(_schoolNameController, Icons.school_outlined, "Nama Resmi Sekolah"),
+          _buildTextField(_addressController, Icons.storefront_outlined, "Detail Alamat (Jalan/RT/RW)"),
+          if (isSchool) _buildTextField(_studentCountController, Icons.groups_outlined, "Estimasi Jumlah Siswa", type: TextInputType.number),
+          if (isLansia) _buildLocationPicker(),
+          const SizedBox(height: 20),
+          _buildUploadBox(isSchool ? "Unggah SK Pengelola Sekolah" : "Unggah Foto KTP"),
+        ]
+      ],
+    );
+  }
+
+  // --- LOGIC PENDAFTARAN ---
+
+  void _handleRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    // Validasi file dokumen (Kecuali Siswa yang hanya butuh token)
+    if (_selectedRole != 'Siswa' && _imageFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Unggah dokumen pendukung!")));
+      return;
+    }
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    
+    // Data Dasar
+    Map<String, String> fields = {
+      "fullname": _nameController.text,
+      "phone": _phoneController.text,
+      "email": _emailController.text,
+      "password": _passwordController.text,
+      "role": _selectedRole == 'Pengelola Sekolah' ? 'pengelola_sekolah' : _selectedRole!.toLowerCase(),
+      "province": _selectedProv ?? "",
+      "city": _selectedCity ?? "",
+      "district": _selectedDist ?? "",
+      "village": _villageController.text,
+    };
+
+    String fileKey = _selectedRole == 'Pengelola Sekolah' ? "file_sk_operator" : "file_ktp";
+
+    // Data Spesifik Role
+    if (_selectedRole == 'Pengelola Sekolah') {
+      fields.addAll({
+        "npsn": _idNumberController.text,
+        "school_name": _schoolNameController.text,
+        "address": _addressController.text,
+        "student_count": _studentCountController.text,
+        "dapur_id": _selectedPartnerId ?? ""
+      });
+    } else if (_selectedRole == 'Lansia') {
+      fields.addAll({
+        "nik": _idNumberController.text, 
+        "coordinates": "${_lat ?? 0},${_lng ?? 0}", 
+        "dapur_id": _selectedPartnerId ?? ""
+      });
+    } else if (_selectedRole == 'Siswa') {
+      fields.addAll({
+        "nisn": _idNumberController.text, 
+        "sekolah_id": _selectedPartnerId ?? "",
+        "registration_token": _studentTokenController.text, // Token dikirim ke backend
+      });
+    }
+
+    // Mengirim data ke AuthProvider
+    final res = await auth.registerWithFile(fields, _imageFile, fileKey);
+    
+    if (res['status'] == 'success') {
+      if (context.mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const WaitingApprovalPage()),
+          (route) => false,
+        );
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? "Gagal"), backgroundColor: Colors.red)
+        );
+      }
+    }
+  }
+
+  // --- WIDGET HELPERS ---
+
   Widget _buildRegionSelection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -198,115 +334,6 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _buildDynamicFields() {
-    bool isSchool = _selectedRole == 'Pengelola Sekolah';
-    bool isStudent = _selectedRole == 'Siswa';
-    bool isLansia = _selectedRole == 'Lansia';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 25),
-        _buildSectionHeader(isSchool ? "Data Institusi Sekolah" : "Identitas Penerima"),
-        _buildTextField(_idNumberController, Icons.badge_outlined, isSchool ? "NPSN Sekolah" : (isLansia ? "NIK Lansia" : "NISN Siswa")),
-        
-        const SizedBox(height: 15),
-        _buildSectionHeader(isStudent ? "Pilih Sekolah" : "Pilih Mitra Dapur"),
-        
-        DropdownButtonFormField<String>(
-          decoration: _inputStyle(isStudent ? "Daftar Sekolah" : "Daftar Dapur Pelaksana", Icons.handshake_outlined),
-          value: _selectedPartnerId,
-          items: _availablePartners.map((p) => DropdownMenuItem(
-            value: p['id'].toString(), 
-            child: Text(p['name'].toString()),
-          )).toList(),
-          onChanged: _availablePartners.isEmpty ? null : (val) => setState(() => _selectedPartnerId = val),
-          validator: (val) => val == null ? "Wajib pilih mitra" : null,
-        ),
-
-        if (_availablePartners.isEmpty && _selectedDist != null) _buildPartnerAlert(),
-
-        if (isSchool || isLansia) ...[
-          const SizedBox(height: 15),
-          if (isSchool) _buildTextField(_schoolNameController, Icons.school_outlined, "Nama Resmi Sekolah"),
-          _buildTextField(_addressController, Icons.storefront_outlined, "Detail Alamat (Jalan/RT/RW)"),
-          if (isSchool) _buildTextField(_studentCountController, Icons.groups_outlined, "Estimasi Jumlah Siswa", type: TextInputType.number),
-          if (isLansia) _buildLocationPicker(),
-          const SizedBox(height: 20),
-          _buildUploadBox(isSchool ? "Unggah SK Pengelola Sekolah" : "Unggah Foto KTP Lansia"),
-        ]
-      ],
-    );
-  }
-
-  // --- LOGIC ---
-
-  void _handleRegister() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if ((_selectedRole != 'Siswa') && _imageFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Unggah dokumen pendukung!")));
-      return;
-    }
-
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    
-    Map<String, String> fields = {
-      "fullname": _nameController.text,
-      "phone": _phoneController.text,
-      "email": _emailController.text,
-      "password": _passwordController.text,
-      "role": _selectedRole == 'Pengelola Sekolah' ? 'pengelola_sekolah' : _selectedRole!.toLowerCase(),
-      "province": _selectedProv ?? "",
-      "city": _selectedCity ?? "",
-      "district": _selectedDist ?? "",
-      "village": _villageController.text,
-    };
-
-    String fileKey = _selectedRole == 'Pengelola Sekolah' ? "file_sk_operator" : "file_ktp";
-
-    if (_selectedRole == 'Pengelola Sekolah') {
-      fields.addAll({
-        "npsn": _idNumberController.text,
-        "school_name": _schoolNameController.text,
-        "address": _addressController.text,
-        "student_count": _studentCountController.text,
-        "dapur_id": _selectedPartnerId ?? ""
-      });
-    } else if (_selectedRole == 'Lansia') {
-      fields.addAll({
-        "nik": _idNumberController.text, 
-        "coordinates": "${_lat ?? 0},${_lng ?? 0}", 
-        "dapur_id": _selectedPartnerId ?? ""
-      });
-    } else if (_selectedRole == 'Siswa') {
-      fields.addAll({
-        "nisn": _idNumberController.text, 
-        "sekolah_id": _selectedPartnerId ?? ""
-      });
-    }
-
-    final res = await auth.registerWithFile(fields, _imageFile, fileKey);
-    
-    if (res['status'] == 'success') {
-      if (context.mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const WaitingApprovalPage()),
-          (route) => false,
-        );
-      }
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message'] ?? "Gagal"), backgroundColor: Colors.red)
-        );
-      }
-    }
-  }
-
-  // --- HELPERS ---
-
   Widget _buildSubmitButton() {
     final auth = Provider.of<AuthProvider>(context);
     bool isDisabled = (_selectedRole == 'Pengelola Sekolah' && _availablePartners.isEmpty) || auth.isLoading;
@@ -316,7 +343,6 @@ class _RegisterPageState extends State<RegisterPage> {
         style: ElevatedButton.styleFrom(
           backgroundColor: isDisabled ? Colors.grey[400] : _primaryBlue, 
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          elevation: 0,
         ),
         onPressed: isDisabled ? null : _handleRegister,
         child: auth.isLoading 
@@ -326,11 +352,10 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  // ... (Input Style & Field Helpers tetap sama dengan kode sebelumnya) ...
   InputDecoration _inputStyle(String label, IconData icon) => InputDecoration(
-    labelText: label, 
-    prefixIcon: Icon(icon, color: _primaryBlue, size: 20), 
-    filled: true, 
-    fillColor: Colors.grey[50],
+    labelText: label, prefixIcon: Icon(icon, color: _primaryBlue, size: 20), 
+    filled: true, fillColor: Colors.grey[50],
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
     contentPadding: const EdgeInsets.symmetric(vertical: 16),
   );
@@ -338,16 +363,13 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget _buildTextField(TextEditingController ctrl, IconData icon, String label, {TextInputType? type}) => Padding(
     padding: const EdgeInsets.only(bottom: 15),
     child: TextFormField(
-      controller: ctrl, 
-      keyboardType: type, 
-      decoration: _inputStyle(label, icon), 
+      controller: ctrl, keyboardType: type, decoration: _inputStyle(label, icon), 
       validator: (v) => v!.isEmpty ? "Wajib diisi" : null,
     ),
   );
 
   Widget _buildPasswordField() => TextFormField(
-    controller: _passwordController, 
-    obscureText: !_isPasswordVisible,
+    controller: _passwordController, obscureText: !_isPasswordVisible,
     decoration: _inputStyle("Buat Kata Sandi", Icons.lock_outline).copyWith(
       suffixIcon: IconButton(
         icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, size: 20),
@@ -366,22 +388,16 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Widget _buildSearchDropdown({required String label, required IconData icon, required List<String> items, String? selectedItem, bool enabled = true, required Function(String?) onChanged}) {
     return DropdownSearch<String>(
-      items: (filter, loadProps) => items, 
-      enabled: enabled, 
-      selectedItem: selectedItem,
+      items: (filter, loadProps) => items, enabled: enabled, selectedItem: selectedItem,
       decoratorProps: DropDownDecoratorProps(decoration: _inputStyle(label, icon)),
       popupProps: const PopupProps.menu(showSearchBox: true),
-      onChanged: onChanged, 
-      validator: (v) => v == null ? "Wajib diisi" : null,
+      onChanged: onChanged, validator: (v) => v == null ? "Wajib diisi" : null,
     );
   }
 
   Widget _buildLogoHeader() => Center(
-    child: Image.asset(
-      'assets/images/logo.png', 
-      height: 110, 
-      errorBuilder: (c, e, s) => Icon(Icons.fastfood, size: 80, color: _primaryBlue),
-    ),
+    child: Image.asset('assets/images/logo.png', height: 110, 
+      errorBuilder: (c, e, s) => Icon(Icons.fastfood, size: 80, color: _primaryBlue)),
   );
 
   Widget _buildSectionHeader(String t) => Padding(
@@ -394,8 +410,7 @@ class _RegisterPageState extends State<RegisterPage> {
     child: Container(
       padding: const EdgeInsets.all(16), 
       decoration: BoxDecoration(
-        color: Colors.grey[50], 
-        borderRadius: BorderRadius.circular(15), 
+        color: Colors.grey[50], borderRadius: BorderRadius.circular(15), 
         border: Border.all(color: _imageFile != null ? Colors.green : Colors.grey[300]!)
       ), 
       child: Row(
@@ -411,16 +426,11 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget _buildLocationPicker() => InkWell(
     onTap: () => setState(() { _lat = -7.7512; _lng = 110.5956; }), 
     child: Container(
-      margin: const EdgeInsets.only(top: 15), 
-      padding: const EdgeInsets.all(16), 
-      decoration: BoxDecoration(
-        color: _lat != null ? Colors.blue[50] : Colors.grey[50], 
-        borderRadius: BorderRadius.circular(15)
-      ), 
+      margin: const EdgeInsets.only(top: 15), padding: const EdgeInsets.all(16), 
+      decoration: BoxDecoration(color: _lat != null ? Colors.blue[50] : Colors.grey[50], borderRadius: BorderRadius.circular(15)), 
       child: Row(
         children: [
-          const Icon(Icons.my_location, color: Colors.red), 
-          const SizedBox(width: 15), 
+          const Icon(Icons.my_location, color: Colors.red), const SizedBox(width: 15), 
           Text(_lat == null ? "Pin Point Lokasi" : "Lokasi: $_lat, $_lng"),
         ],
       ),
@@ -428,13 +438,8 @@ class _RegisterPageState extends State<RegisterPage> {
   );
 
   Widget _buildPartnerAlert() => Container(
-    margin: const EdgeInsets.only(top: 12), 
-    padding: const EdgeInsets.all(12), 
-    decoration: BoxDecoration(
-      color: Colors.blue[50], 
-      borderRadius: BorderRadius.circular(12), 
-      border: Border.all(color: Colors.blue[200]!)
-    ), 
+    margin: const EdgeInsets.only(top: 12), padding: const EdgeInsets.all(12), 
+    decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blue[200]!)), 
     child: Text("Dapur MBG belum tersedia di wilayah $_selectedDist.", style: TextStyle(color: Colors.blue[800], fontSize: 12)),
   );
 
@@ -444,11 +449,10 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 }
 
-// --- MODEL HELPER ---
+// --- MODEL HELPER WILAYAH ---
 class RegionManager {
   final Map<String, dynamic> data;
   RegionManager(this.data);
-
   List<String> getProvinces() => data.keys.toList();
   List<String> getCities(String prov) => (data[prov] as Map<String, dynamic>).keys.toList();
   List<String> getDistricts(String prov, String city) => List<String>.from(data[prov][city]);

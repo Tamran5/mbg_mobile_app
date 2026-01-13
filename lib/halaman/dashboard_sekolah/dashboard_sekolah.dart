@@ -1,11 +1,10 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart'; // WAJIB UNTUK kIsWeb
+import 'package:flutter/foundation.dart'; 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // WAJIB untuk fitur salin (Clipboard)
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
 import '../../providers/auth_provider.dart';
-import '../../services/api_service.dart';
 import '../../widgets/mbg_scaffold.dart';
 
 class DashboardSekolah extends StatefulWidget {
@@ -21,11 +20,10 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
   final ImagePicker _picker = ImagePicker();
   XFile? _imageFile;
 
-  // State terpisah agar tidak refresh seluruh dashboard
+  // State untuk data statistik
   String _totalSiswa = "0";
   String _perluVerifikasi = "0";
   bool _isStatsLoading = true;
-  bool _isUploading = false;
   bool _isTokenLoading = false; 
 
   @override
@@ -43,13 +41,27 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
     if (mounted) setState(() => _isStatsLoading = false);
   }
 
-  // LOGIKA GANTI TOKEN SAJA (Tanpa Refresh Dashboard)
-  Future<void> _changeTokenOnly() async {
+  // Fungsi untuk memperbarui token melalui backend
+  Future<void> _handleRegenerateToken() async {
     if (!mounted) return;
     setState(() => _isTokenLoading = true);
+    
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    await auth.fetchSchoolStats(); 
-    if (mounted) setState(() => _isTokenLoading = false);
+    // Memanggil fungsi yang sudah kita buat di AuthProvider
+    final success = await auth.regenerateSchoolToken(); 
+    
+    if (mounted) {
+      setState(() => _isTokenLoading = false);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Token baru berhasil dibuat!"), backgroundColor: Colors.green)
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gagal memperbarui token"), backgroundColor: Colors.red)
+        );
+      }
+    }
   }
 
   Future<void> _fetchStats() async {
@@ -83,15 +95,15 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  _buildHeader(auth), // Header dengan Logo Notifikasi yang benar
+                  _buildHeader(auth),
                   const SizedBox(height: 25),
                   _buildSummaryCard(),
                   const SizedBox(height: 25),
-                  _buildTokenCard(auth), // Kartu Token Sederhana + Pesan
+                  _buildTokenCard(auth), // Menampilkan Token dari Database
                   const SizedBox(height: 30),
                   const Text("Konfirmasi Kedatangan", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 12),
-                  _buildArrivalCard(), // FIX: Gambar Web & Mobile
+                  _buildArrivalCard(), 
                   const SizedBox(height: 30),
                   const Text("Menu Administrasi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 12),
@@ -122,7 +134,7 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
             ],
           ),
         ),
-        _buildNotificationIcon(), // Menampilkan logo notifikasi kembali
+        _buildNotificationIcon(),
       ],
     );
   }
@@ -143,10 +155,16 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
   }
 
   Widget _buildTokenCard(AuthProvider auth) {
-    String tokenCode = auth.userNpsn != null ? "REG-${auth.userNpsn}" : "MEMUAT...";
+    // Mengambil token asli dari state AuthProvider (hasil dari DB Flask)
+    String tokenCode = auth.registrationToken ?? "BELUM ADA";
+
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA), 
+        borderRadius: BorderRadius.circular(12), 
+        border: Border.all(color: Colors.grey.shade300)
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -158,20 +176,36 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
                 children: [
                   const Text("TOKEN REGISTRASI SISWA", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
                   const SizedBox(height: 4),
-                  Text(tokenCode, style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.w900, fontSize: 20)),
+                  // Menggunakan SelectableText agar user bisa menyorot teks jika ingin
+                  SelectableText(tokenCode, style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.w900, fontSize: 20)),
                 ],
               ),
-              _isTokenLoading 
-                ? SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: _primaryBlue))
-                : IconButton(
-                    onPressed: _changeTokenOnly, // Hanya ganti token saja
-                    icon: Icon(Icons.sync_rounded, color: _primaryBlue, size: 28),
+              Row(
+                children: [
+                  // Tombol Salin
+                  IconButton(
+                    icon: const Icon(Icons.copy_rounded, color: Colors.grey, size: 20),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: tokenCode));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Token disalin ke clipboard!"))
+                      );
+                    },
                   ),
+                  // Tombol Regenerate
+                  _isTokenLoading 
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                    : IconButton(
+                        onPressed: _handleRegenerateToken,
+                        icon: Icon(Icons.sync_rounded, color: _primaryBlue, size: 28),
+                      ),
+                ],
+              ),
             ],
           ),
           const Divider(height: 24),
           const Text(
-            "Pesan: Token ini mencegah siswa dari sekolah/SMA lain mendaftar di akun sekolah ini secara sembarangan.",
+            "Pesan: Berikan kode ini kepada siswa sekolah Anda agar mereka dapat mendaftar. Token ini mencegah pendaftar ilegal.",
             style: TextStyle(fontSize: 11, color: Colors.black54, fontStyle: FontStyle.italic, height: 1.4),
           ),
         ],
@@ -193,12 +227,11 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
               decoration: BoxDecoration(
                 color: Colors.grey[50],
                 borderRadius: BorderRadius.circular(12),
-                // FIX: Gunakan kIsWeb untuk menentukan cara render gambar
                 image: _imageFile != null 
                   ? DecorationImage(
                       image: kIsWeb 
-                        ? NetworkImage(_imageFile!.path) // Untuk Web
-                        : FileImage(File(_imageFile!.path)) as ImageProvider, // Untuk Android
+                        ? NetworkImage(_imageFile!.path)
+                        : FileImage(File(_imageFile!.path)) as ImageProvider,
                       fit: BoxFit.cover
                     ) 
                   : null,
@@ -211,7 +244,10 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: _imageFile == null ? null : () {},
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green, 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+              ),
               child: const Text("KONFIRMASI SEKARANG", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
@@ -232,7 +268,7 @@ class _DashboardSekolahState extends State<DashboardSekolah> {
         _buildActionItem("Data Siswa", Icons.groups_rounded, Colors.blue, () => widget.onTapMenu(1)),
         _buildActionItem("Verifikasi", Icons.how_to_reg_rounded, Colors.orange, () => widget.onTapMenu(2)),
         _buildActionItem("Laporan", Icons.report_problem_rounded, Colors.red, () {}),
-        _buildActionItem("Rekap", Icons.bar_chart_rounded, Colors.teal, () {}),
+        _buildActionItem("Rekap", Icons.view_list_rounded, Colors.teal, () {}),
       ],
     );
   }

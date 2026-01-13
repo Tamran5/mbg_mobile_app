@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import '../../widgets/mbg_scaffold.dart';
-import '../../services/api_service.dart'; // Pastikan import sesuai struktur folder Anda
-import '../../models/menu_model.dart';   // Pastikan import sesuai struktur folder Anda
+import '../../services/api_service.dart'; 
+import '../../providers/auth_provider.dart'; 
+import '../../models/menu_model.dart';   
 
 class JadwalPage extends StatefulWidget {
   const JadwalPage({super.key});
@@ -35,23 +37,34 @@ class _JadwalPageState extends State<JadwalPage> {
     _fetchMenu(); 
   }
 
-  // Fungsi mengambil data gizi dari Flask Backend
-  Future<void> _fetchMenu() async {
-    setState(() => _isLoading = true);
-    try {
-      // Mengambil menu berdasarkan tanggal yang dipilih
-      final menu = await _apiService.fetchMenuByDate(_selectedDate); 
-      setState(() {
-        _currentMenu = menu;
-        _isLoading = false;
-      });
-    } catch (e) {
+  // Lokasi: lib/halaman/dashboard_umum/jadwal.dart
+Future<void> _fetchMenu() async {
+  if (!mounted) return;
+  setState(() => _isLoading = true);
+
+  try {
+    // 1. Ambil instance AuthProvider
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    
+    // 2. Ambil token dari AuthProvider (Gunakan helper getAuthToken yang sudah dibuat)
+    final token = await auth.getAuthToken();
+
+    // 3. Kirimkan 2 argumen: _selectedDate DAN token
+    final menu = await _apiService.fetchMenuByDate(_selectedDate, token);
+
+    setState(() {
+      _currentMenu = menu;
+      _isLoading = false;
+    });
+  } catch (e) {
+    if (mounted) {
       setState(() => _isLoading = false);
       debugPrint("Error API: $e");
     }
   }
+}
 
-  // Membuat daftar 6 hari kerja (Senin-Sabtu) berdasarkan tanggal fokus
+
   List<DateTime> _generateWorkingDays(DateTime focus) {
     DateTime monday = focus.subtract(Duration(days: focus.weekday - 1));
     return List.generate(6, (index) => monday.add(Duration(days: index)));

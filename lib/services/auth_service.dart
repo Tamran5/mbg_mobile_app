@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:image_picker/image_picker.dart'; // Gunakan XFile
-import 'package:http_parser/http_parser.dart'; // Untuk MediaType
+import 'package:image_picker/image_picker.dart'; 
+import 'package:http_parser/http_parser.dart'; 
 import 'api_service.dart';
 
 class AuthService {
@@ -10,7 +10,6 @@ class AuthService {
   final _storage = const FlutterSecureStorage();
 
   // --- 1. LOGIKA PENDAFTARAN (KOMPATIBEL WEB & MOBILE) ---
-  // Menggunakan XFile agar tidak crash di Chrome
   Future<Map<String, dynamic>> registerUser(
       Map<String, String> fields, XFile? file, String fileField) async {
     try {
@@ -45,31 +44,31 @@ class AuthService {
     }
   }
 
-  // --- 2. LOGIKA LOGIN & MANAJEMEN SESI ---
-  Future<Map<String, dynamic>> loginUser(String phone, String password) async {
-    try {
-      final result = await _apiService.login(phone, password);
+Future<Map<String, dynamic>> loginUser(String phone, String password) async {
+  try {
+    // 1. Panggil mesin login dari ApiService
+    final result = await _apiService.login(phone, password);
 
-      if (result['status'] == 'success') {
-        final userData = result['data'];
+    // 2. Jika sukses dari server, simpan semua detail ke Storage di sini
+    if (result['status'] == 'success' && result['token'] != null) {
+      final userData = result['data'];
 
-        // Simpan data krusial untuk filter MBG
-        await _storage.write(key: 'auth_token', value: result['token']);
-        await _storage.write(key: 'user_role', value: userData['role']);
-        await _storage.write(key: 'user_name', value: userData['name']);
-        
-        if (userData['npsn'] != null) {
-          await _storage.write(key: 'user_npsn', value: userData['npsn']);
-        }
-        
-        // Simpan status is_approved (1/0) dari DB
-        await _storage.write(key: 'is_approved', value: userData['is_approved'].toString());
+      await _storage.write(key: 'auth_token', value: result['token']);
+      await _storage.write(key: 'user_role', value: userData['role']);
+      await _storage.write(key: 'user_name', value: userData['name']);
+      
+      if (userData['npsn'] != null) {
+        await _storage.write(key: 'user_npsn', value: userData['npsn'].toString());
       }
-      return result;
-    } catch (e) {
-      return {"status": "error", "message": "Terjadi kesalahan saat login: $e"};
+      
+      await _storage.write(key: 'is_approved', value: userData['is_approved'].toString());
     }
+    
+    return result;
+  } catch (e) {
+    return {"status": "error", "message": "Terjadi kesalahan sistem: $e"};
   }
+}
 
   // --- 3. LOGOUT ---
   Future<void> logoutUser() async {
@@ -77,7 +76,6 @@ class AuthService {
   }
 
   // --- 4. VALIDASI STATUS VERIFIKASI ---
-  // Sangat penting karena id 10 yanto butuh approval admin
   Future<bool> checkLocalApproval() async {
     String? status = await _storage.read(key: 'is_approved');
     return status == 'true' || status == '1'; 

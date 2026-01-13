@@ -41,111 +41,93 @@ class MBGApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'MBG System',
       theme: ThemeData(
+        useMaterial3: true, // Pastikan menggunakan Material 3
         scaffoldBackgroundColor: const Color(0xFFF8F9FD),
         textTheme: GoogleFonts.interTextTheme(),
         colorScheme: ColorScheme.fromSeed(seedColor: navyColor),
       ),
       home: Consumer<AuthProvider>(
-        // Di dalam Consumer<AuthProvider> builder:
-        // Di dalam Consumer<AuthProvider> builder:
-        // Di dalam MBGApp -> Consumer<AuthProvider>
         builder: (context, auth, child) {
           if (auth.isLoggedIn) {
             if (auth.isApproved) {
               String role = auth.userRole?.trim().toLowerCase() ?? "";
-              if (role == 'pengelola_sekolah')
-                return const MainNavigationSekolah();
-              if (role == 'lansia' || role == 'siswa')
-                return const MainNavigationUmum();
+              if (role == 'pengelola_sekolah') return const MainNavigationSekolah();
+              if (role == 'lansia' || role == 'siswa') return const MainNavigationUmum();
             }
             return const WaitingApprovalPage();
           }
-
-          // JIKA BELUM LOGIN:
-          // Jika tombol mulai sudah ditekan, tampilkan Login. Jika belum, tampilkan Welcome.
           return auth.showLogin ? const LoginPage() : const WelcomePage();
         },
       ),
-
-      // Dan pada bagian routes (jika Anda menggunakan pushNamed)
-      routes: {
-        '/login': (context) => const WelcomePage(),
-        '/dashboard-operator': (context) => MainNavigationSekolah(),
-        '/dashboard-umum': (context) => const MainNavigationUmum(),
-      },
     );
   }
 }
 
 // --- NAVIGASI DASHBOARD UMUM (SISWA & LANSIA) ---
-class MainNavigationUmum extends StatefulWidget {
+class MainNavigationUmum extends StatelessWidget {
   const MainNavigationUmum({super.key});
 
-  @override
-  State<MainNavigationUmum> createState() => _MainNavigationUmumState();
-}
-
-class _MainNavigationUmumState extends State<MainNavigationUmum> {
-  int _currentIndex = 0;
-
-  final List<Widget> _pages = [
-    const DashboardPage(),
-    const JadwalPage(),
-    const ChatbotPage(),
-    const UlasanPage(),
-    const ProfilPage(),
+  // Pindahkan daftar halaman ke sini
+  final List<Widget> _pages = const [
+    DashboardPage(),
+    JadwalPage(),
+    ChatbotPage(),
+    UlasanPage(),
+    ProfilPage(),
   ];
 
   @override
   Widget build(BuildContext context) {
     const Color navyColor = Color(0xFF1A237E);
 
-    return Scaffold(
-      body: IndexedStack(
-        // Menggunakan IndexedStack agar state halaman tidak hilang saat pindah tab
-        index: _currentIndex,
-        children: _pages,
-      ),
-      bottomNavigationBar: Container(
-        height: 85,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black..withAlpha(13),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
+    // Gunakan Consumer agar tab berpindah saat dipicu dari Dashboard
+    return Consumer<AuthProvider>(
+      builder: (context, auth, child) {
+        return Scaffold(
+          backgroundColor: Colors.white, // Mencegah area hitam di belakang navigasi
+          body: IndexedStack(
+            index: auth.currentTabIndex,
+            children: _pages,
+          ),
+          bottomNavigationBar: Container(
+            height: 85,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05), // FIX: Gunakan single dot dan withValues
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavIcon(0, Icons.grid_view_rounded, "Beranda", navyColor),
-            _buildNavIcon(1, Icons.calendar_today_rounded, "Jadwal", navyColor),
-            _buildNavIcon(2, Icons.smart_toy_rounded, "AI Chat", navyColor),
-            _buildNavIcon(
-              3,
-              Icons.chat_bubble_outline_rounded,
-              "Ulasan",
-              navyColor,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavIcon(context, 0, Icons.grid_view_rounded, "Beranda", navyColor, auth),
+                _buildNavIcon(context, 1, Icons.calendar_today_rounded, "Jadwal", navyColor, auth),
+                _buildNavIcon(context, 2, Icons.smart_toy_rounded, "AI Chat", navyColor, auth),
+                _buildNavIcon(context, 3, Icons.chat_bubble_outline_rounded, "Ulasan", navyColor, auth),
+                _buildNavIcon(context, 4, Icons.person_outline_rounded, "Profil", navyColor, auth),
+              ],
             ),
-            _buildNavIcon(4, Icons.person_outline_rounded, "Profil", navyColor),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildNavIcon(
+    BuildContext context,
     int index,
     IconData icon,
     String label,
     Color activeColor,
+    AuthProvider auth,
   ) {
-    bool isSelected = _currentIndex == index;
+    bool isSelected = auth.currentTabIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () => auth.setTabIndex(index), // Memperbarui index di Provider
       child: Container(
         color: Colors.transparent,
         width: 65,
@@ -157,7 +139,7 @@ class _MainNavigationUmumState extends State<MainNavigationUmum> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? activeColor.withAlpha(26)
+                    ? activeColor.withValues(alpha: 0.1) // Menggunakan withValues
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
