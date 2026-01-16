@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+
+// Import Provider
 import 'providers/auth_provider.dart';
-import 'halaman/auth/login_page.dart';
 
 // Import Halaman Auth & Status
+import 'halaman/auth/login_page.dart';
 import 'halaman/auth/welcome_page.dart';
 import 'halaman/waiting_approval_page.dart';
+
+// Import Halaman Dashboard
 import 'halaman/dashboard_umum/dashboard.dart';
 import 'halaman/dashboard_umum/jadwal.dart';
 import 'halaman/dashboard_umum/profil.dart';
@@ -15,6 +19,7 @@ import 'halaman/dashboard_umum/chatbot.dart';
 import 'halaman/dashboard_sekolah/main_navigation_sekolah.dart';
 
 void main() {
+  // Memastikan semua plugin (seperti storage) sudah siap sebelum aplikasi jalan
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = true;
 
@@ -22,6 +27,7 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
+          // Menjalankan checkLoginStatus segera setelah Provider dibuat
           create: (_) => AuthProvider()..checkLoginStatus(),
         ),
       ],
@@ -41,21 +47,40 @@ class MBGApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'MBG System',
       theme: ThemeData(
-        useMaterial3: true, // Pastikan menggunakan Material 3
+        useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF8F9FD),
         textTheme: GoogleFonts.interTextTheme(),
         colorScheme: ColorScheme.fromSeed(seedColor: navyColor),
       ),
       home: Consumer<AuthProvider>(
         builder: (context, auth, child) {
+          // --- 1. LOGIKA LOADING (PENCEGAH DATA KOSONG) ---
+          // Jika aplikasi masih membaca data dari storage (checkLoginStatus belum selesai), 
+          // tampilkan loading agar user tidak melihat "Sekolah Tidak Terdaftar".
+          if (auth.isLoading) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(navyColor),
+                ),
+              ),
+            );
+          }
+
+          // --- 2. LOGIKA AUTENTIKASI ---
           if (auth.isLoggedIn) {
             if (auth.isApproved) {
               String role = auth.userRole?.trim().toLowerCase() ?? "";
               if (role == 'pengelola_sekolah') return const MainNavigationSekolah();
+              
+              // Siswa dan Lansia menggunakan Navigasi Umum
               if (role == 'lansia' || role == 'siswa') return const MainNavigationUmum();
             }
+            // Jika sudah login tapi belum disetujui admin
             return const WaitingApprovalPage();
           }
+
+          // --- 3. LOGIKA WELCOME/LOGIN ---
           return auth.showLogin ? const LoginPage() : const WelcomePage();
         },
       ),
@@ -67,7 +92,7 @@ class MBGApp extends StatelessWidget {
 class MainNavigationUmum extends StatelessWidget {
   const MainNavigationUmum({super.key});
 
-  // Pindahkan daftar halaman ke sini
+  // Daftar halaman yang ditampilkan di IndexedStack
   final List<Widget> _pages = const [
     DashboardPage(),
     JadwalPage(),
@@ -80,11 +105,11 @@ class MainNavigationUmum extends StatelessWidget {
   Widget build(BuildContext context) {
     const Color navyColor = Color(0xFF1A237E);
 
-    // Gunakan Consumer agar tab berpindah saat dipicu dari Dashboard
     return Consumer<AuthProvider>(
       builder: (context, auth, child) {
         return Scaffold(
-          backgroundColor: Colors.white, // Mencegah area hitam di belakang navigasi
+          backgroundColor: Colors.white,
+          // IndexedStack menjaga agar halaman tidak reload saat pindah tab
           body: IndexedStack(
             index: auth.currentTabIndex,
             children: _pages,
@@ -95,7 +120,7 @@ class MainNavigationUmum extends StatelessWidget {
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05), // FIX: Gunakan single dot dan withValues
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -104,11 +129,11 @@ class MainNavigationUmum extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavIcon(context, 0, Icons.grid_view_rounded, "Beranda", navyColor, auth),
-                _buildNavIcon(context, 1, Icons.calendar_today_rounded, "Jadwal", navyColor, auth),
-                _buildNavIcon(context, 2, Icons.smart_toy_rounded, "AI Chat", navyColor, auth),
-                _buildNavIcon(context, 3, Icons.chat_bubble_outline_rounded, "Ulasan", navyColor, auth),
-                _buildNavIcon(context, 4, Icons.person_outline_rounded, "Profil", navyColor, auth),
+                _buildNavIcon(0, Icons.grid_view_rounded, "Beranda", navyColor, auth),
+                _buildNavIcon(1, Icons.calendar_today_rounded, "Jadwal", navyColor, auth),
+                _buildNavIcon(2, Icons.smart_toy_rounded, "AI Chat", navyColor, auth),
+                _buildNavIcon(3, Icons.chat_bubble_outline_rounded, "Ulasan", navyColor, auth),
+                _buildNavIcon(4, Icons.person_outline_rounded, "Profil", navyColor, auth),
               ],
             ),
           ),
@@ -118,7 +143,6 @@ class MainNavigationUmum extends StatelessWidget {
   }
 
   Widget _buildNavIcon(
-    BuildContext context,
     int index,
     IconData icon,
     String label,
@@ -127,7 +151,7 @@ class MainNavigationUmum extends StatelessWidget {
   ) {
     bool isSelected = auth.currentTabIndex == index;
     return GestureDetector(
-      onTap: () => auth.setTabIndex(index), // Memperbarui index di Provider
+      onTap: () => auth.setTabIndex(index),
       child: Container(
         color: Colors.transparent,
         width: 65,
@@ -138,9 +162,7 @@ class MainNavigationUmum extends StatelessWidget {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isSelected
-                    ? activeColor.withValues(alpha: 0.1) // Menggunakan withValues
-                    : Colors.transparent,
+                color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(

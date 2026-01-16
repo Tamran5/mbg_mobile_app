@@ -21,34 +21,35 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
 
   void _handleLogin() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    if (_phoneController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Nomor HP dan Password wajib diisi")),
-      );
-      return;
-    }
-
-    final res = await authProvider.login(
-      _phoneController.text,
-      _passwordController.text,
+  if (_phoneController.text.isEmpty || _passwordController.text.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Nomor HP dan Password wajib diisi")),
     );
-
-    if (res['status'] == 'success') {
-
-    } else {
-      // TAMBAHKAN INI: Feedback jika login gagal (Nomor HP/Password salah)
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(res['message'] ?? "Login Gagal"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    return;
   }
+
+  // 1. Jalankan proses login
+  final res = await authProvider.login(
+    _phoneController.text,
+    _passwordController.text,
+  );
+
+  // 2. CEK APAKAH WIDGET MASIH AKTIF
+  // Ini untuk mencegah error "widget has been unmounted"
+  if (!mounted) return;
+
+  if (res['status'] != 'success') {
+    // 3. Tampilkan pesan error hanya jika widget masih ada di layar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(res['message'] ?? "Login Gagal"),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
 
   @override
   void dispose() {

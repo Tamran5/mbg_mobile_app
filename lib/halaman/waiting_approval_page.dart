@@ -140,28 +140,31 @@ class _WaitingApprovalPageState extends State<WaitingApprovalPage> with SingleTi
   }
 
   Widget _buildActionButton(AuthProvider auth) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: () async {
-          bool approved = await auth.refreshApprovalStatus();
-          if (approved && mounted) {
-            String route = auth.userRole == 'operator_sekolah' ? '/dashboard-operator' : '/dashboard-umum';
-            Navigator.pushReplacementNamed(context, route);
-          } else if (mounted) {
-            _showSnackBar("Dokumen Anda masih dalam antrean peninjauan.");
-          }
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _primaryBlue,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          elevation: 0,
-        ),
-        child: const Text("CEK STATUS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+  return SizedBox(
+    width: double.infinity,
+    height: 56,
+    child: ElevatedButton(
+      onPressed: () async {
+        // Fungsi ini akan menembak endpoint /check-status di Flask
+        bool approved = await auth.refreshApprovalStatus();
+        
+        if (approved && mounted) {
+          // TIDAK PERLU Navigator.push karena main.dart sudah memantau isApproved
+          _showSnackBar("Akun berhasil diverifikasi! Mengalihkan...");
+        } else if (mounted) {
+          _showSnackBar("Dokumen Anda masih dalam antrean peninjauan.");
+        }
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _primaryBlue,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        elevation: 0,
       ),
-    );
-  }
+      child: const Text("CEK STATUS", 
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+    ),
+  );
+}
 
   Widget _buildLogoutButton(AuthProvider auth) {
     return TextButton(
