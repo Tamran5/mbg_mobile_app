@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
-import 'package:http_parser/http_parser.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import 'dart:async';
 
@@ -23,19 +21,24 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
   bool _isApproved = false;
 
-  // --- State Data User (Universal) ---
+  // --- State Data User ---
   String? _userRole;
   String? _userName;
   String? _userEmail;
   String? _userPhone;
   String? _registrationToken;
+  String? _schoolName;
+  String? _userNpsn;
+  String? _userNisn;
+  String? _userNik;
+  String? _userClass;
 
-  // --- State Spesifik Role ---
-  String? _userNpsn; // Sekolah
-  String? _schoolName; // Sekolah / Siswa
-  String? _userNisn; // Siswa
-  String? _userNik; // Lansia
-  String? _userClass; // Siswa
+  // --- State List & Polling ---
+  Timer? _statsTimer;
+  String _pendingCount = "0";
+  List _articles = [];
+  bool _hasConfirmedToday = false;
+  List<Map<String, dynamic>> _pendingStudentsList = [];
 
   // --- Getters ---
   int get currentTabIndex => _currentTabIndex;
@@ -43,120 +46,24 @@ class AuthProvider with ChangeNotifier {
   bool get isLoggedIn => _isLoggedIn;
   bool get isLoading => _isLoading;
   bool get isApproved => _isApproved;
-
   String? get userRole => _userRole;
   String? get userName => _userName;
-  String? get userEmail => _userEmail;
   String? get userPhone => _userPhone;
   String? get userNpsn => _userNpsn;
-  String? get schoolName => _schoolName;
   String? get userNisn => _userNisn;
   String? get userNik => _userNik;
   String? get userClass => _userClass;
+  String? get userEmail => _userEmail;
+  String? get schoolName => _schoolName;
   String? get registrationToken => _registrationToken;
-
-  Timer? _statsTimer;
-  String _pendingCount = "0";
   String get pendingCount => _pendingCount;
-
-  List _articles = [];
   List get articles => _articles;
-
-  bool _hasConfirmedToday = false;
   bool get hasConfirmedToday => _hasConfirmedToday;
-
-  // Mulai pengecekan otomatis saat login berhasil
-  void startStatsPolling() {
-    _statsTimer?.cancel(); // Hentikan timer lama jika ada
-    _statsTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
-      fetchSchoolStats(); // Panggil fungsi fetch data secara berkala
-      fetchArticles("");
-    });
-  }
-
-  // Hentikan pengecekan saat logout
-  void stopStatsPolling() {
-    _statsTimer?.cancel();
-  }
-
-  List<Map<String, dynamic>> _pendingStudentsList = [];
   List<Map<String, dynamic>> get pendingStudentsList => _pendingStudentsList;
 
-  Future<void> fetchArticles(String _) async {
-    try {
-      String? token = await getAuthToken();
-      final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/articles'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final result = json.decode(response.body);
-        _articles = result['data']; // Data baru dari database
-        notifyListeners(); // Memicu UI untuk update otomatis tanpa restart
-      }
-    } catch (e) {
-      debugPrint("Update artikel gagal: $e");
-    }
-  }
-
-  // Modifikasi fetchSchoolStats agar juga mengambil daftar siswa terbaru
-  Future<Map<String, dynamic>> fetchSchoolStats() async {
-    try {
-      String? token = await getAuthToken();
-      final statsRes = await http.get(
-        Uri.parse('${ApiService.baseUrl}/school/stats'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      final listRes = await http.get(
-        Uri.parse('${ApiService.baseUrl}/school/pending-students'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (statsRes.statusCode == 200 && listRes.statusCode == 200) {
-        final statsData = json.decode(statsRes.body);
-        final listData = json.decode(listRes.body);
-
-        if (statsData['status'] == 'success') {
-          _pendingCount = statsData['data']['perlu_verifikasi'].toString();
-          _hasConfirmedToday =
-              statsData['data']['has_confirmed_today'] ?? false;
-
-          if (statsData['data'].containsKey('school_token')) {
-            _registrationToken = statsData['data']['school_token'];
-            // SIMPAN KE STORAGE agar tidak hilang saat restart
-            await _storage.write(
-              key: 'registration_token',
-              value: _registrationToken,
-            );
-          }
-        }
-
-        if (listData['status'] == 'success') {
-          _pendingStudentsList = List<Map<String, dynamic>>.from(
-            listData['data'],
-          );
-        }
-
-        notifyListeners();
-        return statsData;
-      }
-      return {"status": "error"};
-    } catch (e) {
-      debugPrint("Error Fetch Stats: $e");
-      return {"status": "error"};
-    }
-  }
-
-  // Helper Ambil Token
-  Future<String?> getAuthToken() async {
-    return await _storage.read(key: 'auth_token');
-  }
-
-  // --- 0. MANAJEMEN UI ---
-  void setTabIndex(int index) {
-    _currentTabIndex = index;
+  // --- HELPER METHODS ---
+  void _setLoading(bool value) {
+    _isLoading = value;
     notifyListeners();
   }
 
@@ -165,131 +72,202 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> checkLoginStatus() async {
-    _isLoading = true;
-    notifyListeners();
+  Future<String?> getAuthToken() async {
+    return await _storage.read(key: 'auth_token');
+  }
 
-    String? token = await _storage.read(key: 'auth_token');
-    debugPrint("DEBUG: Mengecek Token di Storage: $token");
+  void setTabIndex(int index) {
+    _currentTabIndex = index;
+    notifyListeners();
+  }
+
+  // --- POLLING LOGIC ---
+  void startStatsPolling() {
+    _statsTimer?.cancel();
+    _statsTimer = Timer.periodic(const Duration(seconds: 20), (timer) {
+      fetchSchoolStats();
+      fetchArticles();
+    });
+  }
+
+  void stopStatsPolling() {
+    _statsTimer?.cancel();
+  }
+
+  // --- 1. AUTHENTICATION (Login & Status) ---
+
+  Future<void> checkLoginStatus() async {
+    _setLoading(true);
+    String? token = await getAuthToken();
 
     if (token != null && token.isNotEmpty && token != "null") {
-      // Ambil data lokal dulu agar UI langsung tampil (Instan)
+      // Load data lokal instan
       _userName = await _storage.read(key: 'user_name');
       _schoolName = await _storage.read(key: 'school_name');
       _userRole = await _storage.read(key: 'user_role');
       _isLoggedIn = true;
       notifyListeners();
 
-      try {
-        final response = await http
-            .get(
-              Uri.parse('${ApiService.baseUrl}/check-status'),
-              headers: {'Authorization': 'Bearer $token'},
-            )
-            .timeout(const Duration(seconds: 10));
+      final res = await _apiService.get("check-status", token);
+      if (res['status'] == 'success') {
+        final userData = res['data'];
+        _userName = userData['name'] ?? _userName;
+        _isApproved = res['is_approved'] == true;
 
-        if (response.statusCode == 200) {
-          final result = json.decode(response.body);
-          final userData = result['data'];
-
-          // Sinkronisasi data terbaru dari server
-          _userName = userData['name'] ?? _userName;
-          _isApproved = result['is_approved'] == true;
-
-          // Cegah penimpaan data null
-          if (userData['school_name'] != null) {
-            _schoolName = userData['school_name'];
-            await _storage.write(key: 'school_name', value: _schoolName);
-          }
-
-          startStatsPolling(); // Jalankan update otomatis
-        } else {
-          await logout();
+        if (userData['school_name'] != null) {
+          _schoolName = userData['school_name'];
+          await _storage.write(key: 'school_name', value: _schoolName);
         }
-      } catch (e) {
-        debugPrint("Offline Mode: Menggunakan data lokal.");
+        startStatsPolling();
+      } else {
+        await logout();
       }
     }
-
-    _isLoading = false;
-    notifyListeners();
+    _setLoading(false);
   }
 
-  // --- 2. LOGIN ---
   Future<Map<String, dynamic>> login(String phone, String password) async {
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
-      final result = await _apiService.login(phone, password);
-
-      // DEBUG: Cek apakah token benar-benar sampai di sini
-      debugPrint("DEBUG: Login Response: $result");
+      // Gunakan trim() untuk menghindari spasi tak sengaja
+      final result = await _apiService.login(phone.trim(), password);
 
       if (result['status'] == 'success') {
         final userData = result['data'];
-        final String? tokenValue = result['token'];
+        final token = result['token'];
 
-        if (tokenValue == null || tokenValue.isEmpty) {
-          throw Exception("Token tidak ditemukan dalam respon server");
-        }
+        // 1. Simpan SEMUA data ke Storage agar sinkron saat refresh
+        await _storage.write(key: 'auth_token', value: token);
+        await _storage.write(key: 'user_role', value: userData['role']);
+        await _storage.write(key: 'user_name', value: userData['name']);
+        await _storage.write(
+          key: 'school_name',
+          value: userData['school_name'],
+        );
+        await _storage.write(
+          key: 'is_approved',
+          value: userData['is_approved'].toString(),
+        );
+        await _storage.write(
+          key: 'registration_token',
+          value: userData['registration_token'],
+        );
 
-        // 1. Update State Memori
-        _isLoggedIn = true;
+        // 2. Update variabel memori
         _userRole = userData['role'];
         _userName = userData['name'];
-        _userEmail = userData['email'];
-        _schoolName =
-            userData['school_name']; // Ini yang ditampilkan di Dashboard
+        _schoolName = userData['school_name'];
         _isApproved = userData['is_approved'] ?? false;
         _registrationToken = userData['registration_token'];
+        _isLoggedIn = true;
 
-        // 2. Simpan Permanen (Wajib AWAIT semua)
-        // --- PERBAIKAN: Ganti Future.wait dengan urutan await satu per satu ---
-        try {
-          debugPrint("DEBUG: Memulai proses simpan data...");
+        startStatsPolling();
 
-          await _storage.write(key: 'auth_token', value: tokenValue);
-          await _storage.write(key: 'user_role', value: _userRole);
-          await _storage.write(key: 'user_name', value: _userName);
-          await _storage.write(key: 'school_name', value: _schoolName);
-          await _storage.write(
-            key: 'registration_token',
-            value: _registrationToken,
-          );
-          await _storage.write(
-            key: 'is_approved',
-            value: _isApproved.toString(),
-          );
+        _isLoading = false;
+        notifyListeners();
 
-          debugPrint("DEBUG: Semua data berhasil disimpan ke Storage.");
-        } catch (e) {
-          // Menangkap OperationError agar aplikasi tidak crash
-          debugPrint(
-            "DEBUG: Gagal simpan ke storage (Kemungkinan IndexedDB penuh/terkunci): $e",
-          );
-        }
-
-        // 3. Verifikasi Storage (Hanya untuk Debug)
-        String? savedToken = await _storage.read(key: 'auth_token');
-        debugPrint("DEBUG: Berhasil simpan token: ${savedToken != null}");
-
-        notifyListeners(); // Update UI segera setelah data tersimpan
-        startStatsPolling(); // Jalankan polling artikel
+        return result;
+      } else {
+        _setLoading(false);
+        return result;
       }
-
-      _isLoading = false;
-      notifyListeners();
-      return result;
     } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      debugPrint("DEBUG: Error Login: $e");
-      return {"status": "error", "message": e.toString()};
+      _setLoading(false);
+      return {"status": "error", "message": "Terjadi kesalahan sistem."};
     }
   }
 
-  // --- 3. UPDATE PROFIL ---
+  Future<void> logout() async {
+    stopStatsPolling();
+
+    await _storage.deleteAll();
+
+    _isLoggedIn = false;
+    _isApproved = false;
+    _userRole = null;
+    _userName = null;
+    _userEmail = null;
+    _userPhone = null;
+    _schoolName = null;
+    _registrationToken = null;
+    _currentTabIndex = 0;
+
+    notifyListeners();
+  }
+
+  // --- 2. DATA FETCHING (Stats & Articles) ---
+
+  Future<void> fetchArticles() async {
+    final token = await getAuthToken();
+    final res = await _apiService.get("articles", token);
+    if (res['status'] == 'success') {
+      _articles = res['data'];
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchSchoolStats() async {
+    final token = await getAuthToken();
+
+    // 1. Ambil data statistik (untuk status konfirmasi & token)
+    final res = await _apiService.fetchSchoolStats(token);
+
+    // 2. Ambil data list siswa terbaru (untuk sinkronisasi badge)
+    final listRes = await _apiService.get("school/pending-students", token);
+
+    if (res['status'] == 'success' && listRes['status'] == 'success') {
+      // Simpan daftar siswa ke state
+      _pendingStudentsList = List<Map<String, dynamic>>.from(listRes['data']);
+
+      _pendingCount = _pendingStudentsList.length.toString();
+
+      _hasConfirmedToday = res['data']['has_confirmed_today'] ?? false;
+      _registrationToken = res['data']['school_token'];
+
+      notifyListeners();
+    }
+    return res;
+  }
+
+  // --- 3. STUDENT MANAGEMENT ---
+
+  Future<void> fetchPendingStudents() async {
+    final token = await getAuthToken();
+    final res = await _apiService.get("school/pending-students", token);
+    if (res['status'] == 'success') {
+      _pendingStudentsList = List<Map<String, dynamic>>.from(res['data']);
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyStudent(
+    int studentId,
+    String action,
+  ) async {
+    final token = await getAuthToken();
+    return await _apiService.post("school/verify-student", {
+      'student_id': studentId,
+      'action': action,
+    }, token);
+  }
+
+  // --- 4. REVIEW & FEEDBACK (BERT AI) ---
+
+  Future<Map<String, dynamic>> submitReview({
+    required int rating,
+    required List<String> tags,
+    required String komentar,
+  }) async {
+    _setLoading(true);
+    final token = await getAuthToken();
+    final res = await _apiService.submitReview(rating, tags, komentar, token);
+    _setLoading(false);
+    return res;
+  }
+
+  // --- 5. PROFILE & SECURITY ---
+
   Future<bool> updateProfile({
     required String name,
     required String email,
@@ -300,431 +278,171 @@ class AuthProvider with ChangeNotifier {
     String? nik,
     String? studentClass,
   }) async {
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
+    final token = await getAuthToken();
+    final res = await _apiService.post("update-profile", {
+      'name': name,
+      'email': email,
+      'phone': phone,
+      if (npsn != null) 'npsn': npsn,
+      if (schoolName != null) 'school_name': schoolName,
+      if (nisn != null) 'nisn': nisn,
+      if (nik != null) 'nik': nik,
+      if (studentClass != null) 'class': studentClass,
+    }, token);
 
-    try {
-      String? token = await getAuthToken();
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/update-profile'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({
-          'name': name,
-          'email': email,
-          'phone': phone,
-          if (npsn != null) 'npsn': npsn,
-          if (schoolName != null) 'school_name': schoolName,
-          if (nisn != null) 'nisn': nisn,
-          if (nik != null) 'nik': nik,
-          if (studentClass != null) 'class': studentClass,
-        }),
-      );
-
-      final result = json.decode(response.body);
-
-      if (response.statusCode == 200 && result['status'] == 'success') {
-        _userName = name;
-        _userEmail = email;
-        _userPhone = phone;
-        if (npsn != null) _userNpsn = npsn;
-        if (schoolName != null) _schoolName = schoolName;
-        if (nisn != null) _userNisn = nisn;
-        if (nik != null) _userNik = nik;
-        if (studentClass != null) _userClass = studentClass;
-
-        await _storage.write(key: 'user_name', value: name);
-        await _storage.write(key: 'user_email', value: email);
-        await _storage.write(key: 'user_phone', value: phone);
-        if (npsn != null) await _storage.write(key: 'user_npsn', value: npsn);
-        if (schoolName != null)
-          await _storage.write(key: 'school_name', value: schoolName);
-        if (nisn != null) await _storage.write(key: 'user_nisn', value: nisn);
-        if (nik != null) await _storage.write(key: 'user_nik', value: nik);
-        if (studentClass != null)
-          await _storage.write(key: 'user_class', value: studentClass);
-
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-      _isLoading = false;
+    if (res['status'] == 'success') {
+      _userName = name;
+      await _storage.write(key: 'user_name', value: name);
       notifyListeners();
-      return false;
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return false;
+      _setLoading(false);
+      return true;
     }
+    _setLoading(false);
+    return false;
   }
 
-  // --- 4. KEAMANAN (Password & Email) ---
   Future<Map<String, dynamic>> changePassword(
-    String oldPassword,
-    String newPassword,
+    String oldPass,
+    String newPass,
   ) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      String? token = await getAuthToken();
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/change-password'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({
-          'old_password': oldPassword,
-          'new_password': newPassword,
-        }),
-      );
-      _isLoading = false;
-      notifyListeners();
-      return json.decode(response.body);
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return {"status": "error", "message": e.toString()};
-    }
+    _setLoading(true);
+    final token = await getAuthToken();
+    final res = await _apiService.post("change-password", {
+      'old_password': oldPass,
+      'new_password': newPass,
+    }, token);
+    _setLoading(false);
+    return res;
   }
+
+  // --- 1. EMAIL MANAGEMENT ---
 
   Future<Map<String, dynamic>> requestChangeEmail(
     String newEmail,
     String password,
   ) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      String? token = await getAuthToken();
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/request-change-email'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'new_email': newEmail, 'password': password}),
-      );
-      _isLoading = false;
-      notifyListeners();
-      return json.decode(response.body);
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return {"status": "error", "message": e.toString()};
-    }
+    _setLoading(true);
+    final token = await getAuthToken();
+    final res = await _apiService.post("request-change-email", {
+      'new_email': newEmail,
+      'password': password,
+    }, token);
+    _setLoading(false);
+    return res;
   }
 
   Future<Map<String, dynamic>> verifyChangeEmail(
     String newEmail,
     String otp,
   ) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      String? token = await getAuthToken();
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/verify-change-email'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'new_email': newEmail, 'otp': otp}),
-      );
-      final result = json.decode(response.body);
-      if (response.statusCode == 200 && result['status'] == 'success') {
-        _userEmail = newEmail;
-        await _storage.write(key: 'user_email', value: newEmail);
-      }
-      _isLoading = false;
+    _setLoading(true);
+    final token = await getAuthToken();
+    final res = await _apiService.post("verify-change-email", {
+      'new_email': newEmail,
+      'otp': otp,
+    }, token);
+
+    if (res['status'] == 'success') {
+      _userEmail = newEmail;
+      await _storage.write(key: 'user_email', value: newEmail);
       notifyListeners();
-      return result;
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return {"status": "error", "message": e.toString()};
     }
+    _setLoading(false);
+    return res;
   }
 
-  // --- 5. LOGOUT (Reset Total) ---
-  Future<void> logout() async {
-    await _storage.deleteAll();
-    _isLoggedIn = false;
-    _isApproved = false;
-    _userRole = null;
-    _userName = null;
-    _userEmail = null;
-    _userPhone = null;
-    _registrationToken = null;
-    _userNpsn = null;
-    _schoolName = null;
-    _userNisn = null;
-    _userNik = null;
-    _userClass = null;
-    _currentTabIndex = 0;
-    notifyListeners();
-  }
+  // --- 2. STATUS & TOKEN MANAGEMENT ---
 
-  // --- 6. FITUR TAMBAHAN (Stats, Token, Verifikasi) ---
   Future<bool> refreshApprovalStatus() async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      String? token = await getAuthToken();
-      final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/check-status'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      final result = json.decode(response.body);
-      if (result['status'] == 'success') {
-        _isApproved = result['is_approved'];
-        await _storage.write(key: 'is_approved', value: _isApproved.toString());
-      }
-      _isLoading = false;
+    _setLoading(true);
+    final token = await getAuthToken();
+    final res = await _apiService.get("check-status", token);
+
+    if (res['status'] == 'success') {
+      _isApproved = res['is_approved'];
+      await _storage.write(key: 'is_approved', value: _isApproved.toString());
       notifyListeners();
-      return _isApproved;
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return false;
     }
+    _setLoading(false);
+    return _isApproved;
   }
 
   Future<bool> regenerateSchoolToken() async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      String? token = await getAuthToken();
-
-      // Proteksi: Jika token login tidak ditemukan
-      if (token == null) {
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
-
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/school/regenerate-token'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      final result = json.decode(response.body);
-
-      if (response.statusCode == 200 && result['status'] == 'success') {
-        _registrationToken = result['new_token'];
-
-        // Simpan agar saat aplikasi dibuka kembali data tetap ada
-        await _storage.write(
-          key: 'registration_token',
-          value: _registrationToken,
-        );
-
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-    } catch (e) {
-      debugPrint("Error regenerate token: $e");
+    _setLoading(true);
+    final token = await getAuthToken();
+    if (token == null) {
+      _setLoading(false);
+      return false;
     }
 
-    _isLoading = false;
-    notifyListeners();
+    final res = await _apiService.post("school/regenerate-token", {}, token);
+
+    if (res['status'] == 'success') {
+      _registrationToken = res['new_token'];
+      await _storage.write(
+        key: 'registration_token',
+        value: _registrationToken,
+      );
+      notifyListeners();
+      _setLoading(false);
+      return true;
+    }
+    _setLoading(false);
     return false;
   }
 
-  Future<Map<String, dynamic>> registerWithFile(
-    Map<String, String> f,
-    XFile? file,
-    String key,
-  ) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiService.baseUrl}/register'),
-      );
-      request.fields.addAll(f);
-      if (file != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            key,
-            file.path,
-            contentType: MediaType('image', 'jpeg'),
-          ),
-        );
-      }
-      var res = await http.Response.fromStream(await request.send());
-      _isLoading = false;
-      notifyListeners();
-      return json.decode(res.body);
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return {"status": "error", "message": e.toString()};
-    }
-  }
+  // --- 3. SCHOOL OPERATIONS (STUDENTS & PHOTOS) ---
 
-  // 2. Update fungsi fetch agar bersifat reaktif
-  Future<List<Map<String, dynamic>>> fetchPendingStudents() async {
-    try {
-      String? token = await getAuthToken();
-      final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/school/pending-students'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      final result = json.decode(response.body);
-
-      if (result['status'] == 'success') {
-        // PENTING: Perbarui variabel global agar UI yang menggunakan
-        // context.watch<AuthProvider>().pendingStudentsList bisa mendeteksi perubahan
-        _pendingStudentsList = List<Map<String, dynamic>>.from(result['data']);
-
-        // Memicu pembangunan ulang (rebuild) pada UI
-        notifyListeners();
-
-        return _pendingStudentsList;
-      }
-      return [];
-    } catch (e) {
-      debugPrint("Error fetch pendaftar: $e");
-      return [];
-    }
-  }
-
-  Future<Map<String, dynamic>> verifyStudent(
-    int studentId,
-    String action,
-  ) async {
-    try {
-      String? token = await getAuthToken();
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/school/verify-student'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'student_id': studentId, 'action': action}),
-      );
-
-      return json.decode(response.body);
-    } catch (e) {
-      return {"status": "error", "message": e.toString()};
-    }
-  }
-
-  // --- FETCH DAFTAR SISWA AKTIF ---
   Future<List<Map<String, dynamic>>> fetchApprovedStudents() async {
-    try {
-      String? token = await getAuthToken();
-      final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/school/students'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
+    final token = await getAuthToken();
+    final res = await _apiService.get("school/students", token);
 
-      final result = json.decode(response.body);
-      if (result['status'] == 'success') {
-        // Pastikan setiap data memiliki properti 'selected' untuk UI Flutter
-        return List<Map<String, dynamic>>.from(result['data']).map((s) {
-          s['selected'] = false;
-          return s;
-        }).toList();
-      }
-      return [];
-    } catch (e) {
-      debugPrint("Error fetch data siswa: $e");
-      return [];
+    if (res['status'] == 'success') {
+      return List<Map<String, dynamic>>.from(res['data']).map((s) {
+        s['selected'] = false;
+        return s;
+      }).toList();
     }
+    return [];
   }
 
-  // --- AKSI MASSAL (Hapus, Naik Kelas, dll) ---
   Future<bool> bulkActionStudents(List<int> ids, String action) async {
-    try {
-      String? token = await getAuthToken();
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/school/bulk-action'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({'student_ids': ids, 'action': action}),
-      );
-      return json.decode(response.body)['status'] == 'success';
-    } catch (e) {
-      return false;
-    }
+    final token = await getAuthToken();
+    final res = await _apiService.post("school/bulk-action", {
+      'student_ids': ids,
+      'action': action,
+    }, token);
+    return res['status'] == 'success';
   }
 
   Future<bool> uploadArrivalPhoto(Uint8List imageBytes, String fileName) async {
-    try {
-      String? token = await getAuthToken();
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiService.baseUrl}/school/confirm-arrival'),
-      );
+    _setLoading(true);
+    final token = await getAuthToken();
+    final success = await _apiService.uploadArrivalPhoto(
+      imageBytes,
+      fileName,
+      token,
+    );
 
-      request.headers.addAll({'Authorization': 'Bearer $token'});
-
-      // Mengirim file dalam bentuk bytes (Aman untuk Web & Mobile)
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'arrival_photo',
-          imageBytes,
-          filename: fileName,
-          contentType: MediaType('image', 'jpeg'),
-        ),
-      );
-
-      var streamedResponse = await request.send();
-      return streamedResponse.statusCode == 200;
-    } catch (e) {
-      debugPrint("Error: $e");
-      return false;
+    if (success) {
+      _hasConfirmedToday = true;
+      notifyListeners();
     }
+    _setLoading(false);
+    return success;
   }
 
-  // Tambahkan ini di bagian bawah atau atas method lain
-  void _setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
-  }
+  // --- 6. REGISTRATION WITH FILE ---
 
-  // Di dalam class AuthProvider
-  Future<Map<String, dynamic>> submitReview({
-    required int rating,
-    required List<String> tags,
-    required String komentar,
-  }) async {
-    _setLoading(true); // Sekarang sudah tidak error karena helper sudah dibuat
-    try {
-      final token = await getAuthToken();
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/submit-ulasan'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({
-          // Gunakan json.encode agar konsisten dengan method lain
-          'rating': rating,
-          'tags': tags,
-          'komentar': komentar,
-        }),
-      );
-
-      final res = json.decode(response.body);
-      return res;
-    } catch (e) {
-      debugPrint("Submit Review Error: $e");
-      return {'status': 'error', 'message': e.toString()};
-    } finally {
-      _setLoading(false);
-    }
+  Future<Map<String, dynamic>> registerWithFile(
+    Map<String, String> fields,
+    XFile? file,
+    String key,
+  ) async {
+    _setLoading(true);
+    final res = await _apiService.registerWithFile(fields, file, key);
+    _setLoading(false);
+    return res;
   }
 }
